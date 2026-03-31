@@ -26,7 +26,7 @@ third-party data processors.
 - Pinecone — managed, simple API, excluded: data leaves AWS boundary,
   adds a third-party processor to the compliance surface
 - Weaviate (self-hosted) — excluded: additional container infra overhead
-  not justified at portfolio scale
+  not warranted at this deployment scale
 - ChromaDB — excluded: no production-grade managed option, local-only
   at this scale
 - AWS OpenSearch with k-NN — excluded: heavier operational footprint,
@@ -58,7 +58,7 @@ via EMBEDDING_PROVIDER env var means the pipeline is not locked to OpenAI.
   a second Cohere dependency alongside re-ranking; OpenAI sufficient for
   English-only NIST corpus
 - BGE-M3 (self-hosted) — best open-source option, MIT license, 1024 dims,
-  excluded: local GPU infra overhead not justified at portfolio scale;
+  excluded: local GPU infra overhead not warranted at this deployment scale;
   viable for air-gapped FedRAMP HIGH environments
 - GCP: text-embedding-004 (Vertex AI) — 768 dims, excluded: lower
   dimensionality; viable if full GCP stack required
@@ -127,7 +127,7 @@ bi-encoder similarity on out-of-distribution regulatory phrasing.
 **Rationale:** Full pipeline observability — every retrieval, re-rank, and
 generation call traced end-to-end. Self-hosted means no data leaves the
 local environment, no usage-based billing, and no third-party processor
-added to the compliance surface. Free at portfolio scale. Langfuse provides
+added to the compliance surface. No cost at this deployment scale. Langfuse provides
 span-level latency, token counts, and retrieval metadata in a single UI.
 
 **Alternatives evaluated:**
@@ -216,9 +216,9 @@ documented in README to show iteration.
 
 **Alternatives evaluated:**
 - TruLens — good LLM-as-judge approach, excluded: smaller community,
-  less recognized in interviews than RAGAs
+  less established in the RAG evaluation community than RAGAs
 - DeepEval — strong CI/CD integration, excluded: more complex setup
-  not justified at portfolio scale
+  not warranted at this deployment scale
 - LangSmith Evals — tight LangChain integration, excluded: data leaves
   self-hosted environment, incompatible with governed federal corpus
   data handling requirements

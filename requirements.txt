@@ -1,0 +1,36 @@
+# LangChain — orchestration, loaders, splitters, retrieval chains
+langchain==0.3.14
+langchain-community==0.3.14
+langchain-aws==0.2.9
+langchain-openai==0.2.14
+
+# Embeddings
+openai==1.59.6
+
+# AWS
+boto3==1.35.99
+
+# Vector store
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+
+# Re-ranking
+cohere==5.13.5
+
+# Tracing
+langfuse==2.57.8
+
+# Evaluation
+ragas==0.2.13
+
+# Frontend
+streamlit==1.41.1
+
+# Document ingestion
+pypdf==5.1.0
+
+# Config
+python-dotenv==1.0.1
+
+# CI
+flake8==7.1.1

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install flake8
+
+      - name: Lint
+        run: flake8 . --max-line-length=100 --exclude=venv,.venv
+
+      - name: Validate required files exist
+        run: |
+          files=(
+            "config.py"
+            "config/prompts.yaml"
+            ".env.example"
+            "requirements.txt"
+            "docs/decision_log.md"
+            "docs/architecture.md"
+          )
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              exit 1
+            fi
+            echo "OK: $f"
+          done
