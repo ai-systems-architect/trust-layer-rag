@@ -1,0 +1,295 @@
+# Decision Log — governed-compliance-engine
+
+All architectural decisions recorded here. Format: decision made, rationale,
+alternatives evaluated. Referenced from config.py via DL-XXX pointers.
+
+---
+
+## DL-001 — Corpus Selection (superseded by DL-011)
+*Original decision: NIST SP 800-series + Federal Register API. Refined in
+DL-011 after scoping three specific authoritative sources. See DL-011.*
+
+---
+
+## DL-002 — Vector Store
+**Decision:** pgvector extension on Amazon RDS (PostgreSQL)
+**Date:** 2026-03-31
+
+**Rationale:** Single security boundary — all data (relational metadata,
+vector embeddings, audit logs) lives in one RDS instance under one IAM
+policy and one VPC. Eliminates a second managed service, a second access
+control layer, and a second audit trail. pgvector HNSW index is sufficient
+for corpus size (<100K chunks). FedRAMP-aligned deployments prefer fewer
+third-party data processors.
+
+**Alternatives evaluated:**
+- Pinecone — managed, simple API, excluded: data leaves AWS boundary,
+  adds a third-party processor to the compliance surface
+- Weaviate (self-hosted) — excluded: additional container infra overhead
+  not justified at portfolio scale
+- ChromaDB — excluded: no production-grade managed option, local-only
+  at this scale
+- AWS OpenSearch with k-NN — excluded: heavier operational footprint,
+  higher cost for equivalent corpus size
+- GCP: AlloyDB with pgvector — equivalent path on GCP; same PostgreSQL
+  wire protocol, pgvector supported natively, single security boundary
+  preserved
+- Azure: Azure Database for PostgreSQL Flexible Server with pgvector —
+  direct equivalent; pgvector GA on Azure PostgreSQL as of 2024
+
+---
+
+## DL-003 — Embedding Model
+**Decision:** OpenAI text-embedding-3-large (3072 dimensions)
+**Date:** 2026-03-31
+
+**Rationale:** 3072-dimensional vectors capture dense regulatory control
+language in the NIST/FISMA corpus more precisely than lower-dimensional
+alternatives. Regulatory text is highly technical and lexically precise —
+higher dimensionality improves separation between semantically similar but
+functionally distinct controls (e.g. AC-2 vs AC-3). Provider abstraction
+via EMBEDDING_PROVIDER env var means the pipeline is not locked to OpenAI.
+
+**Alternatives evaluated:**
+- amazon.titan-embed-text-v2:0 — native Bedrock, no extra API key, 1536
+  dims, excluded: lower dimensionality less suited for technical regulatory
+  text; remains the swap-in if OpenAI dependency is disallowed
+- cohere embed-english-v3.0 — strong retrieval benchmarks, excluded: adds
+  a second Cohere dependency alongside re-ranking; OpenAI sufficient for
+  English-only NIST corpus
+- BGE-M3 (self-hosted) — best open-source option, MIT license, 1024 dims,
+  excluded: local GPU infra overhead not justified at portfolio scale;
+  viable for air-gapped FedRAMP HIGH environments
+- GCP: text-embedding-004 (Vertex AI) — 768 dims, excluded: lower
+  dimensionality; viable if full GCP stack required
+- Azure: text-embedding-3-large via Azure OpenAI Service — identical model,
+  same dimensions, different API endpoint; drop-in swap via EMBEDDING_PROVIDER
+
+---
+
+## DL-004 — Generation Model
+**Decision:** Claude 3.5 Sonnet via Amazon Bedrock (anthropic.claude-3-5-sonnet-20241022-v2:0)
+**Date:** 2026-03-31
+
+**Rationale:** Bedrock is the AWS-managed access path to Claude — no direct
+Anthropic API key required, IAM-controlled, stays within the AWS security
+boundary. Claude 3.5 Sonnet is the best price/performance point for long-
+context regulatory summarization and citation-enforced generation. Bedrock
+Guardrails integrates natively for PII filtering and hallucination controls
+without an additional service.
+
+**Alternatives evaluated:**
+- GPT-4o via Azure OpenAI Service — strong alternative, excluded: adds
+  Azure dependency to an otherwise AWS-native stack; viable if org is
+  Azure-first
+- Llama 3 70B via Bedrock — open weights, lower cost, excluded: citation
+  enforcement and instruction following weaker than Claude 3.5 Sonnet on
+  regulatory text
+- Mistral Large via Bedrock — excluded: similar trade-off to Llama; Claude
+  Sonnet outperforms on structured compliance output
+- GCP: Gemini 1.5 Pro via Vertex AI — strong long-context handling,
+  excluded: not in AWS stack; viable if full GCP deployment required;
+  equivalent guardrails via Vertex AI Model Armor
+- Azure: GPT-4o via Azure OpenAI — direct enterprise path, FedRAMP
+  authorized, excluded for same reason as above; preferred choice in
+  Azure-first environments
+
+---
+
+## DL-005 — Re-Ranking
+**Decision:** Cohere Rerank API (rerank-english-v3.0)
+**Date:** 2026-03-31
+
+**Rationale:** Cross-encoder re-ranking improves precision after hybrid
+retrieval — dense + sparse fusion returns 10 candidates, Cohere re-ranks
+to top 5 before generation. Single API call, no local model hosting,
+same cross-encoder quality as self-hosted alternatives. Cohere's rerank
+model is purpose-built for retrieval tasks and consistently outperforms
+bi-encoder similarity on out-of-distribution regulatory phrasing.
+
+**Alternatives evaluated:**
+- Sentence Transformers cross-encoder (self-hosted) — excluded: local GPU
+  infra overhead; functionally equivalent but adds operational complexity
+- BGE-Reranker-v2-m3 (self-hosted) — excluded: same infra concern;
+  best option for air-gapped environments
+- Amazon Bedrock — no native rerank API at time of decision; may change
+- GCP: Vertex AI Ranking API — managed re-ranking, viable GCP-native
+  alternative; same role, different vendor
+- Azure: Azure AI Search semantic ranker — built into Azure AI Search,
+  excluded: tied to Azure Search as vector store; viable in Azure-first stack
+
+---
+
+## DL-006 — Tracing
+**Decision:** Langfuse self-hosted (Docker)
+**Date:** 2026-03-31
+
+**Rationale:** Full pipeline observability — every retrieval, re-rank, and
+generation call traced end-to-end. Self-hosted means no data leaves the
+local environment, no usage-based billing, and no third-party processor
+added to the compliance surface. Free at portfolio scale. Langfuse provides
+span-level latency, token counts, and retrieval metadata in a single UI.
+
+**Alternatives evaluated:**
+- LangSmith — managed, polished UI, excluded: data leaves local environment,
+  usage-based pricing, adds a third-party vendor dependency
+- Weights & Biases Weave — strong ML experiment tracking, excluded:
+  heavier than needed for pipeline tracing; better fit for model training
+- Arize Phoenix — open source, excluded: less mature LangChain integration
+  at time of decision
+- GCP: Cloud Trace + Vertex AI Experiments — native GCP observability stack,
+  viable if full GCP deployment; no single pane for RAG pipeline tracing
+- Azure: Azure Monitor + Application Insights — viable in Azure-first stack;
+  requires custom instrumentation for RAG span tracking
+
+---
+
+## DL-007 — Chunking Strategy
+**Decision:** 600 tokens, 100 token overlap, recursive character splitting
+**Date:** 2026-03-31
+
+**Rationale:** 600 tokens (midpoint of 500–800 range) balances regulatory
+context retention against retrieval precision. NIST control statements
+average 200–400 tokens; 600-token chunks capture a full control plus
+surrounding implementation guidance without bleeding into unrelated controls.
+100-token overlap preserves cross-chunk continuity for controls that span
+paragraph boundaries. Recursive character splitting respects sentence and
+paragraph structure before falling back to character-level splits.
+
+**Alternatives evaluated:**
+- Fixed 256-token chunks — too small for regulatory paragraphs; splits
+  control statements mid-sentence, breaks retrieval context
+- Fixed 1024-token chunks — too large; retrieval returns broad sections
+  rather than specific controls, dilutes precision
+- Semantic chunking (embedding-based) — excluded: computationally expensive
+  at ingestion time, harder to reproduce; revisit if precision degrades
+- Markdown/header-aware splitting — excluded: NIST PDFs do not parse to
+  clean markdown; recursive character splitting is more robust to PDF
+  extraction artifacts
+
+---
+
+## DL-008 — Hybrid Retrieval + Thresholds
+**Decision:** Dense cosine similarity + BM25 keyword search fused via
+Reciprocal Rank Fusion (RRF), top-10 retrieved, re-ranked to top-5
+**Date:** 2026-03-31
+
+**Rationale:** Dense retrieval alone misses exact regulatory references —
+a query for "AC-2(4)" returns semantically similar controls but not the
+exact citation. BM25 catches keyword-precise matches that dense vectors
+score weakly. RRF fusion is parameter-free, robust to score scale
+differences between dense and sparse, and consistently outperforms
+weighted linear combination without requiring tuning. Faithfulness
+threshold of 0.85 enforces citation grounding; retrieval precision
+threshold of 0.50 flags low-confidence retrievals for review.
+
+**Alternatives evaluated:**
+- Dense-only retrieval — excluded: misses exact control citations; baseline
+  benchmark retained in RAGAs evaluation for comparison
+- Sparse-only (BM25) — excluded: misses semantic paraphrases of control
+  requirements; lower recall on natural language queries
+- Weighted linear combination (alpha * dense + (1-alpha) * sparse) —
+  excluded: requires tuning alpha per corpus; RRF is parameter-free and
+  equally performant
+- ColBERT late interaction — excluded: significant infra overhead; best
+  option if RRF precision proves insufficient
+- GCP: hybrid search in Vertex AI Search — managed hybrid retrieval,
+  excluded: vendor-managed fusion, less transparent for portfolio
+  demonstration
+- Azure: hybrid search in Azure AI Search — BM25 + vector hybrid built-in,
+  excluded: ties retrieval to Azure AI Search as vector store
+
+---
+
+## DL-009 — RAG Evaluation Framework
+**Decision:** RAGAs
+**Date:** 2026-03-31
+
+**Rationale:** Purpose-built for RAG evaluation with the exact metrics
+needed for a governed retrieval system — faithfulness measures whether
+generated answers are grounded in retrieved chunks, context precision
+measures whether retrieval is finding the right passages. Golden dataset
+of 50 hand-curated Q&A pairs built from real NIST/FISMA corpus after
+basic retrieval working — ensures evaluation reflects actual failure cases
+not synthetic queries. Score progression (dense-only vs hybrid+rerank)
+documented in README to show iteration.
+
+**Alternatives evaluated:**
+- TruLens — good LLM-as-judge approach, excluded: smaller community,
+  less recognized in interviews than RAGAs
+- DeepEval — strong CI/CD integration, excluded: more complex setup
+  not justified at portfolio scale
+- LangSmith Evals — tight LangChain integration, excluded: data leaves
+  self-hosted environment, incompatible with governed federal corpus
+  data handling requirements
+- Manual spot-check only — excluded: insufficient for portfolio signal,
+  RAGAs provides reproducible quantitative benchmark
+
+**Metrics tracked:**
+- Faithfulness — are answers grounded in retrieved context
+- Context Precision — is retrieval finding the right chunks
+- Context Recall — is retrieval finding all relevant chunks
+- Answer Relevancy — is the answer relevant to the question
+
+---
+
+## DL-010 — Orchestration Framework
+**Decision:** LangChain
+**Date:** 2026-03-31
+
+**Rationale:** LangChain provides mature abstractions for every layer of
+this pipeline — document loaders, text splitters, embedding wrappers,
+retrieval chains, and prompt templates — reducing boilerplate without
+sacrificing visibility into pipeline internals. Prompt versioning via
+config/prompts.yaml integrates cleanly with LangChain's PromptTemplate
+pattern. Strong Langfuse integration via LangChain callbacks means tracing
+requires no custom instrumentation.
+
+**Alternatives evaluated:**
+- LlamaIndex — strong document indexing abstractions, excluded: retrieval
+  pipeline customization (hybrid RRF, custom re-rank step) is more
+  transparent in LangChain; LlamaIndex better suited for document-heavy
+  RAG without custom retrieval logic
+- Google Agent Development Kit (ADK) — Google's framework for building
+  multi-agent pipelines, excluded: optimized for Vertex AI and GCP-native
+  tooling; adds GCP dependency to an AWS-native stack; strong alternative
+  if deploying on GCP with Vertex AI as the model provider
+- Custom pipeline (no framework) — excluded: significant boilerplate for
+  retrieval chain, prompt management, and callback hooks; framework
+  overhead justified at this pipeline complexity
+- Haystack — strong enterprise RAG support, excluded: smaller community,
+  fewer Bedrock integrations at time of decision
+
+---
+
+## DL-011 — Corpus Selection (refined)
+**Decision:** Three federal sources — NIST SP 800-53 Rev 5, NIST AI RMF 1.0,
+FedRAMP Moderate Baseline
+**Date:** 2026-03-31
+
+**Rationale:** 800-53 Rev 5 is the master federal security control catalog
+and primary corpus (~3,000 chunks). AI RMF 1.0 added for two reasons —
+short document (~400 chunks, zero pipeline complexity) and direct narrative
+bridge to P1 responsible-mlops-risk-engine portfolio project. FedRAMP
+Moderate Baseline (~1,200 chunks) enables cross-document queries mapping
+800-53 controls to cloud authorization requirements — significantly richer
+demo than single-document lookup.
+
+**Total corpus:** ~4,600 chunks at 700 tokens — trivial for pgvector
+**One-time ingestion cost:** ~$0.70 (OpenAI text-embedding-3-large)
+**Live 24/7 cost:** ~$17-20/month (RDS db.t3.micro dominant cost)
+
+**Ingestion order:** 800-53 first to validate full pipeline end to end,
+AI RMF second (short, fast validation), FedRAMP third after retrieval
+proven on first two sources.
+
+**Alternatives evaluated:**
+- 800-53 only — sufficient for basic demo, excluded: misses cross-document
+  queries and AI RMF portfolio narrative bridge
+- Full Federal Register — too broad, millions of documents, excluded:
+  scope creep with no retrieval quality benefit at portfolio scale
+- Synthetic corpus — excluded: real federal data is the differentiator,
+  synthetic defeats the purpose
+
+**Future expansion:** 800-53B control baselines, NIST 800-37 RMF process
+guide, NIST 800-171 for CUI handling — all additive, zero pipeline changes
