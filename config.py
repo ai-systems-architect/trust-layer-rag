@@ -91,10 +91,11 @@ NIST_AI_600_1_URL = os.getenv(
 # FedRAMP Moderate Baseline — downloaded as .docx, converted to PDF at ingest time
 # LibreOffice headless conversion preserves table structure; avoids python-docx noise
 # see docs/decision_log.md DL-011
-FEDRAMP_MODERATE_URL = os.getenv(
-    "FEDRAMP_MODERATE_URL",
-    "https://www.fedramp.gov/assets/resources/templates/SSP-Appendix-A-Moderate-FedRAMP-Security-Controls.docx"
+_FEDRAMP_DEFAULT = (
+    "https://www.fedramp.gov/assets/resources/templates/"
+    "SSP-Appendix-A-Moderate-FedRAMP-Security-Controls.docx"
 )
+FEDRAMP_MODERATE_URL = os.getenv("FEDRAMP_MODERATE_URL", _FEDRAMP_DEFAULT)
 
 S3_RAW_PREFIX = os.getenv("S3_RAW_PREFIX", "raw/")
 S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
