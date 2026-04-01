@@ -60,6 +60,20 @@ Total: ~4,900 chunks — one-time ingestion cost ~$0.70 (OpenAI embeddings)
 
 ---
 
+## System Dependencies
+
+LibreOffice is required for FedRAMP document conversion:
+
+```bash
+# Mac
+brew install libreoffice
+
+# Ubuntu / EC2
+sudo apt-get install libreoffice
+```
+
+---
+
 ## Setup
 
 ```bash
@@ -75,6 +89,7 @@ export PYTHONPATH=.
 
 **Requirements:**
 - Python 3.9+
+- LibreOffice (FedRAMP .docx → PDF conversion)
 - AWS CLI configured with Bedrock access
 - OpenAI API key
 - Cohere API key

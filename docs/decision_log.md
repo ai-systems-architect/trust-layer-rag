@@ -272,44 +272,69 @@ requires no custom instrumentation.
 
 ---
 
-## DL-011 — Corpus Selection (refined)
-**Decision:** Four federal sources — NIST SP 800-53 Rev 5, NIST AI RMF 1.0,
+## DL-011 — Corpus Selection and FedRAMP Ingestion Challenge
+**Decision:** Four sources — NIST SP 800-53 Rev 5, NIST AI RMF 1.0,
 NIST AI 600-1 GenAI Profile, FedRAMP Moderate Baseline
 **Date:** 2026-03-31
 
-**Rationale:** 800-53 Rev 5 is the master federal security control catalog
-and primary corpus (~3,000 chunks). AI RMF 1.0 added for two reasons —
-short document (~400 chunks, zero pipeline complexity) and direct narrative
-bridge to P1 responsible-mlops-risk-engine portfolio project. AI 600-1
-GenAI Profile (~300 chunks) adds AI-specific risk and trustworthiness
-guidance — natural extension of AI RMF for generative AI systems. FedRAMP
-Moderate Baseline (~1,200 chunks) enables cross-document queries mapping
-800-53 controls to cloud authorization requirements — significantly richer
-demo than single-document lookup.
+**Corpus sources and direct URLs:**
+- NIST SP 800-53 Rev 5 (PDF):
+  https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf
+- NIST AI RMF 1.0 (PDF):
+  https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf
+- NIST AI 600-1 GenAI Profile (PDF):
+  https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf
+- FedRAMP Moderate Baseline (Word → PDF):
+  https://www.fedramp.gov/assets/resources/templates/SSP-Appendix-A-Moderate-FedRAMP-Security-Controls.docx
 
 **Total corpus:** ~4,900 chunks at 600 tokens — trivial for pgvector
 **One-time ingestion cost:** ~$0.70 (OpenAI text-embedding-3-large)
 **Live 24/7 cost:** ~$17-20/month (RDS db.t3.micro dominant cost)
 
-**Parsers:** PyMuPDF for all three PDF sources, python-docx for FedRAMP
-Moderate Baseline (.docx). Routing by file extension at ingest time —
-no manual switching. All PDF sources served from nvlpubs.nist.gov,
-NIST's canonical publication server.
+**FedRAMP Ingestion Challenge — documented:**
+FedRAMP does not publish its Moderate Baseline as a PDF. The authoritative
+source is a Word (.docx) template — a heavily formatted SSP appendix with
+complex nested tables containing control requirements.
+
+Three options were evaluated:
+
+Option 1 — FedRAMP Transition Guide PDF
+  Rejected: Transition guide covers only what changed Rev 4 → Rev 5,
+  not the full control catalog. Queries about specific Moderate baseline
+  controls (e.g. IR-4, AC-17) would return incomplete context — fails
+  the faithfulness gate.
+
+Option 2 — python-docx direct table extraction
+  Rejected: python-docx concatenates table cells without structural
+  context — control IDs, parameters, and requirements merge into noisy
+  unstructured text. Retrieval quality degrades significantly on
+  table-heavy government templates.
+
+Option 3 — Download .docx, convert to PDF via LibreOffice (SELECTED)
+  Download at ingestion time via requests from direct URL. Convert to
+  PDF using LibreOffice headless before parsing. PyMuPDF then handles
+  the converted PDF — same parser as all three NIST sources. Pipeline
+  remains format-agnostic with zero special cases at parse time.
+  LibreOffice preserves table structure in PDF output far more cleanly
+  than python-docx text extraction.
+
+**Result:** Single PyMuPDF parser handles all four corpus sources.
+python-docx removed from requirements.txt entirely.
+LibreOffice required as system dependency — documented in README setup.
 
 **Ingestion order:** 800-53 first to validate full pipeline end to end,
 AI RMF second (short, fast validation), AI 600-1 third, FedRAMP last
 after retrieval proven on first three sources.
 
-**Alternatives evaluated:**
-- 800-53 only — sufficient for basic demo, excluded: misses cross-document
-  queries and AI RMF portfolio narrative bridge
-- Full Federal Register — too broad, millions of documents, excluded:
-  scope creep with no retrieval quality benefit at this deployment scale
-- Synthetic corpus — excluded: real federal data is the differentiator,
-  synthetic defeats the purpose
+**Alternatives evaluated for corpus scope:**
+- 800-53 only — excluded: misses cross-document queries and AI RMF
+  portfolio narrative bridge
+- FedRAMP Transition Guide — excluded: incomplete control catalog
+- Full Federal Register — excluded: millions of documents, scope creep
+- Synthetic corpus — excluded: real federal data is the differentiator
 - pypdf for PDF parsing — excluded: PyMuPDF produces cleaner text
   extraction on government PDFs, better handling of complex layouts
 - pdfplumber — excluded: higher overhead, PyMuPDF sufficient and faster
 
-**Future expansion:** 800-53B control baselines, NIST 800-37 RMF process
-guide, NIST 800-171 for CUI handling — all additive, zero pipeline changes
+**Future expansion:** 800-53B control baselines, NIST 800-37 RMF
+process guide — additive, zero pipeline changes required

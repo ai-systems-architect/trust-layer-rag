@@ -64,7 +64,7 @@ TOP_K_RERANK = int(os.getenv("TOP_K_RERANK", "5"))
 #            coverage (~300 chunks). FedRAMP enables cross-document queries
 #            mapping controls to cloud authorization baselines (~1,200 chunks).
 #            Total ~4,900 chunks — trivial for pgvector, negligible cost.
-# Parsers: PyMuPDF for PDFs (.pdf), python-docx for Word (.docx)
+# Parser: PyMuPDF for all sources — FedRAMP .docx converted to PDF via LibreOffice
 # Ingestion order: 800-53 first (validate pipeline), AI RMF second,
 #            AI 600-1 third, FedRAMP last (after retrieval proven)
 # One-time ingestion cost: ~$0.70 total (OpenAI embeddings)
@@ -88,9 +88,12 @@ NIST_AI_600_1_URL = os.getenv(
     "NIST_AI_600_1_URL",
     "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf"
 )
-FEDRAMP_BASELINE_URL = os.getenv(
-    "FEDRAMP_BASELINE_URL",
-    "https://www.fedramp.gov/rev5/documents-templates/"
+# FedRAMP Moderate Baseline — downloaded as .docx, converted to PDF at ingest time
+# LibreOffice headless conversion preserves table structure; avoids python-docx noise
+# see docs/decision_log.md DL-011
+FEDRAMP_MODERATE_URL = os.getenv(
+    "FEDRAMP_MODERATE_URL",
+    "https://www.fedramp.gov/assets/resources/templates/SSP-Appendix-A-Moderate-FedRAMP-Security-Controls.docx"
 )
 
 S3_RAW_PREFIX = os.getenv("S3_RAW_PREFIX", "raw/")
