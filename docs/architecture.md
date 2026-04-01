@@ -7,8 +7,9 @@ see docs/decision_log.md.
 
 ## Overview
 
-Governed RAG system for NIST, FISMA, and FedRAMP compliance. Ingests federal
-regulatory PDFs and Federal Register API data, stores embeddings in pgvector,
+Governed RAG system for NIST, FISMA, and FedRAMP compliance. Ingests four
+federal regulatory documents (three PDFs via PyMuPDF, one Word document via
+python-docx), stores embeddings in pgvector,
 retrieves via hybrid dense + sparse fusion, re-ranks with Cohere, generates
 citation-enforced responses via Claude 3.5 Sonnet on Bedrock, and enforces
 hallucination controls via Bedrock Guardrails. Every pipeline call is traced
@@ -58,7 +59,7 @@ Dense       Sparse
 
 | Layer | Component | Purpose |
 |---|---|---|
-| Ingestion | LangChain PDF loader + Federal Register API | Parse and chunk regulatory documents |
+| Ingestion | PyMuPDF (PDF) + python-docx (Word) | Parse and chunk four federal regulatory documents |
 | Embedding | OpenAI text-embedding-3-large | 3072-dim dense vectors |
 | Vector Store | pgvector on Amazon RDS | HNSW index, cosine similarity, single security boundary |
 | Retrieval | pgvector (dense) + tsvector (sparse) + RRF | Hybrid fusion — exact citations + semantic queries |

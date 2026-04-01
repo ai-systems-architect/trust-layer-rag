@@ -263,33 +263,43 @@ requires no custom instrumentation.
 ---
 
 ## DL-011 — Corpus Selection (refined)
-**Decision:** Three federal sources — NIST SP 800-53 Rev 5, NIST AI RMF 1.0,
-FedRAMP Moderate Baseline
+**Decision:** Four federal sources — NIST SP 800-53 Rev 5, NIST AI RMF 1.0,
+NIST AI 600-1 GenAI Profile, FedRAMP Moderate Baseline
 **Date:** 2026-03-31
 
 **Rationale:** 800-53 Rev 5 is the master federal security control catalog
 and primary corpus (~3,000 chunks). AI RMF 1.0 added for two reasons —
 short document (~400 chunks, zero pipeline complexity) and direct narrative
-bridge to P1 responsible-mlops-risk-engine portfolio project. FedRAMP
+bridge to P1 responsible-mlops-risk-engine portfolio project. AI 600-1
+GenAI Profile (~300 chunks) adds AI-specific risk and trustworthiness
+guidance — natural extension of AI RMF for generative AI systems. FedRAMP
 Moderate Baseline (~1,200 chunks) enables cross-document queries mapping
 800-53 controls to cloud authorization requirements — significantly richer
 demo than single-document lookup.
 
-**Total corpus:** ~4,600 chunks at 700 tokens — trivial for pgvector
+**Total corpus:** ~4,900 chunks at 600 tokens — trivial for pgvector
 **One-time ingestion cost:** ~$0.70 (OpenAI text-embedding-3-large)
 **Live 24/7 cost:** ~$17-20/month (RDS db.t3.micro dominant cost)
 
+**Parsers:** PyMuPDF for all three PDF sources, python-docx for FedRAMP
+Moderate Baseline (.docx). Routing by file extension at ingest time —
+no manual switching. All PDF sources served from nvlpubs.nist.gov,
+NIST's canonical publication server.
+
 **Ingestion order:** 800-53 first to validate full pipeline end to end,
-AI RMF second (short, fast validation), FedRAMP third after retrieval
-proven on first two sources.
+AI RMF second (short, fast validation), AI 600-1 third, FedRAMP last
+after retrieval proven on first three sources.
 
 **Alternatives evaluated:**
 - 800-53 only — sufficient for basic demo, excluded: misses cross-document
   queries and AI RMF portfolio narrative bridge
 - Full Federal Register — too broad, millions of documents, excluded:
-  scope creep with no retrieval quality benefit at portfolio scale
+  scope creep with no retrieval quality benefit at this deployment scale
 - Synthetic corpus — excluded: real federal data is the differentiator,
   synthetic defeats the purpose
+- pypdf for PDF parsing — excluded: PyMuPDF produces cleaner text
+  extraction on government PDFs, better handling of complex layouts
+- pdfplumber — excluded: higher overhead, PyMuPDF sufficient and faster
 
 **Future expansion:** 800-53B control baselines, NIST 800-37 RMF process
 guide, NIST 800-171 for CUI handling — all additive, zero pipeline changes

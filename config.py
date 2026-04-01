@@ -56,33 +56,41 @@ TOP_K_RERANK = int(os.getenv("TOP_K_RERANK", "5"))
 
 # =============================================================================
 # CORPUS CONFIGURATION
-# Decision: Three authoritative federal sources — NIST 800-53, AI RMF, FedRAMP
+# Decision: Four authoritative federal sources — NIST 800-53, AI RMF,
+#            AI 600-1, FedRAMP Moderate Baseline
 # Rationale: 800-53 is the master control catalog (~3,000 chunks). AI RMF
 #            bridges to P1 responsible-mlops-risk-engine portfolio narrative
-#            (~400 chunks). FedRAMP enables cross-document queries mapping
-#            controls to cloud authorization baselines (~1,200 chunks).
-#            Total ~4,600 chunks — trivial for pgvector, negligible cost.
+#            (~400 chunks). AI 600-1 GenAI Profile adds AI-specific risk
+#            coverage (~300 chunks). FedRAMP enables cross-document queries
+#            mapping controls to cloud authorization baselines (~1,200 chunks).
+#            Total ~4,900 chunks — trivial for pgvector, negligible cost.
+# Parsers: PyMuPDF for PDFs (.pdf), python-docx for Word (.docx)
 # Ingestion order: 800-53 first (validate pipeline), AI RMF second,
-#            FedRAMP third (after retrieval proven on first two sources)
+#            AI 600-1 third, FedRAMP last (after retrieval proven)
 # One-time ingestion cost: ~$0.70 total (OpenAI embeddings)
 # Decision rationale: see docs/decision_log.md DL-011
 # =============================================================================
 CORPUS_SOURCES = os.getenv(
     "CORPUS_SOURCES",
-    "nist_800_53,nist_ai_rmf,fedramp_moderate_baseline"
+    "nist_800_53,nist_ai_rmf,nist_ai_600_1,fedramp_moderate_baseline"
 ).split(",")
 
+# All PDF sources served from nvlpubs.nist.gov — NIST's canonical publication server
 NIST_800_53_URL = os.getenv(
     "NIST_800_53_URL",
-    "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final"
+    "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf"
 )
 NIST_AI_RMF_URL = os.getenv(
     "NIST_AI_RMF_URL",
-    "https://airc.nist.gov/RMF/Documentation"
+    "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+)
+NIST_AI_600_1_URL = os.getenv(
+    "NIST_AI_600_1_URL",
+    "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf"
 )
 FEDRAMP_BASELINE_URL = os.getenv(
     "FEDRAMP_BASELINE_URL",
-    "https://www.fedramp.gov/documents-templates"
+    "https://www.fedramp.gov/rev5/documents-templates/"
 )
 
 S3_RAW_PREFIX = os.getenv("S3_RAW_PREFIX", "raw/")

@@ -11,7 +11,7 @@ hallucination controls, and full pipeline observability.
 
 | Layer | Component | Tool |
 |---|---|---|
-| Ingestion | PDF parsing, chunking | LangChain + pypdf |
+| Ingestion | PDF + Word parsing, chunking | PyMuPDF + python-docx |
 | Embedding | Dense vectors (3072 dims) | OpenAI text-embedding-3-large |
 | Vector Store | pgvector + HNSW index | RDS PostgreSQL |
 | Retrieval | Dense + sparse fused via RRF | pgvector + tsvector |
@@ -30,15 +30,16 @@ Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
 
 ## Corpus
 
-Three authoritative federal sources — no synthetic data.
+Four authoritative federal sources — no synthetic data.
 
-| Source | Chunks | Purpose |
-|---|---|---|
-| NIST SP 800-53 Rev 5 | ~3,000 | Master federal security control catalog |
-| NIST AI RMF 1.0 | ~400 | AI risk management — bridges to P1 portfolio project |
-| FedRAMP Moderate Baseline | ~1,200 | Maps 800-53 controls to cloud authorization requirements |
+| Source | Format | Chunks | Purpose |
+|---|---|---|---|
+| NIST SP 800-53 Rev 5 | PDF | ~3,000 | Master federal security control catalog |
+| NIST AI RMF 1.0 | PDF | ~400 | AI risk management — bridges to P1 portfolio project |
+| NIST AI 600-1 GenAI Profile | PDF | ~300 | AI-specific risk and trustworthiness guidance |
+| FedRAMP Moderate Baseline | Word | ~1,200 | Maps 800-53 controls to cloud authorization requirements |
 
-Total: ~4,600 chunks — one-time ingestion cost ~$0.70 (OpenAI embeddings)
+Total: ~4,900 chunks — one-time ingestion cost ~$0.70 (OpenAI embeddings)
 
 ---
 
