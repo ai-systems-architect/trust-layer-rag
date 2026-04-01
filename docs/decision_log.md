@@ -146,6 +146,7 @@ span-level latency, token counts, and retrieval metadata in a single UI.
 
 ## DL-007 — Chunking Strategy
 **Decision:** 600 tokens, 100 token overlap, recursive character splitting
+via LangChain's `from_tiktoken_encoder()` with cl100k_base tokenizer
 **Date:** 2026-03-31
 
 **Rationale:** 600 tokens (midpoint of 500–800 range) balances regulatory
@@ -155,6 +156,12 @@ surrounding implementation guidance without bleeding into unrelated controls.
 100-token overlap preserves cross-chunk continuity for controls that span
 paragraph boundaries. Recursive character splitting respects sentence and
 paragraph structure before falling back to character-level splits.
+
+tiktoken enforces true token-based boundaries rather than character
+approximations — critical for consistency with the OpenAI embedding model
+(text-embedding-3-large uses cl100k_base). Character-based approximation
+(~4 chars/token) would produce inconsistent chunk sizes across regulatory
+text with dense acronyms and control identifiers.
 
 **Alternatives evaluated:**
 - Fixed 256-token chunks — too small for regulatory paragraphs; splits
@@ -166,6 +173,9 @@ paragraph structure before falling back to character-level splits.
 - Markdown/header-aware splitting — excluded: NIST PDFs do not parse to
   clean markdown; recursive character splitting is more robust to PDF
   extraction artifacts
+- Character-based approximation (~2,400 chars for 600 tokens) — excluded:
+  imprecise for technical regulatory text with dense acronyms; tiktoken
+  ensures chunk sizes align exactly with embedding model token limits
 
 ---
 
