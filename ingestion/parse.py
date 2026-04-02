@@ -2,11 +2,12 @@ import logging
 import re
 import fitz  # PyMuPDF
 from pathlib import Path
+from config import LOCAL_RAW_DIR as _RAW_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-LOCAL_RAW_DIR = Path("data/raw")
+LOCAL_RAW_DIR = Path(_RAW_DIR)
 
 # Source metadata — display name and version per corpus key
 SOURCE_METADATA = {

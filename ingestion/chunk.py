@@ -4,13 +4,13 @@ from pathlib import Path
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from config import CHUNK_SIZE, CHUNK_OVERLAP
+from config import CHUNK_SIZE, CHUNK_OVERLAP, PROCESSED_DIR as _PROCESSED_DIR
 from ingestion.parse import parse_corpus
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-PROCESSED_DIR = Path("data/processed")
+PROCESSED_DIR = Path(_PROCESSED_DIR)
 
 # initialized once at module level — not re-created per document
 splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
@@ -52,6 +52,7 @@ def chunk_corpus(corpus: dict) -> list[dict]:
     return all_chunks
 
 
+# see docs/decision_log.md DL-012 — why JSON over pickle, parquet, sqlite
 def save_chunks(chunks: list[dict]) -> Path:
     """Write chunks to data/processed/chunks.json — input file for embed.py."""
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)

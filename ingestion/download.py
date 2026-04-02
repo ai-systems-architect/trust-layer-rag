@@ -9,6 +9,7 @@ from pathlib import Path
 from config import (
     S3_BUCKET,
     S3_RAW_PREFIX,
+    LOCAL_RAW_DIR as _RAW_DIR,
     NIST_800_53_URL,
     NIST_AI_RMF_URL,
     NIST_AI_600_1_URL,
@@ -18,7 +19,7 @@ from config import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-LOCAL_RAW_DIR = Path("data/raw")
+LOCAL_RAW_DIR = Path(_RAW_DIR)
 
 # Add new corpus source here — no other file needs to change
 SOURCES = {
