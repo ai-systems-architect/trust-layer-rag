@@ -19,8 +19,11 @@ RDS_DB_NAME = os.getenv("RDS_DB_NAME", "compliance")
 RDS_USER = os.getenv("RDS_USER")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 
-# Embedding — OpenAI text-embedding-3-large (3072 dims)
+# OpenAI — embeddings only
 # see docs/decision_log.md DL-003
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Embedding — OpenAI text-embedding-3-large (3072 dims)
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "3072"))
@@ -99,3 +102,11 @@ FEDRAMP_MODERATE_URL = os.getenv("FEDRAMP_MODERATE_URL", _FEDRAMP_DEFAULT)
 
 S3_RAW_PREFIX = os.getenv("S3_RAW_PREFIX", "raw/")
 S3_PROCESSED_PREFIX = os.getenv("S3_PROCESSED_PREFIX", "processed/")
+
+# Local data paths
+LOCAL_RAW_DIR = os.getenv("LOCAL_RAW_DIR", "data/raw")
+PROCESSED_DIR = os.getenv("PROCESSED_DIR", "data/processed")
+CHUNKS_PATH = os.getenv("CHUNKS_PATH", "data/processed/chunks.json")
+
+# RDS instance identifier — not a secret, resource name only
+DB_IDENTIFIER = os.getenv("DB_IDENTIFIER", "governed-compliance-engine")
