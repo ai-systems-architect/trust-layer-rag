@@ -218,6 +218,20 @@ weighted linear combination without requiring tuning. Faithfulness
 threshold of 0.85 enforces citation grounding; retrieval precision
 threshold of 0.50 flags low-confidence retrievals for review.
 
+**RRF_K=60 — why this value:**
+k=60 is the standard default, empirically stable across retrieval benchmarks.
+Lower k (e.g. 10) amplifies top-rank differences — brittle when one retriever
+dominates. Higher k (e.g. 100) flattens the score distribution — ranks 1 and
+10 become nearly indistinguishable. At ~5K chunks, k=60 requires no tuning.
+
+**plainto_tsquery vs to_tsquery:**
+to_tsquery() requires manually structured query syntax — to_tsquery('access & management').
+Raw user input like "access management controls" throws a syntax error.
+plainto_tsquery() tokenizes and ANDs terms automatically — safe for unstructured
+compliance queries. websearch_to_tsquery() adds OR/NOT/phrase support but
+compliance queries are additive; extra operators introduce noise without
+precision gain.
+
 **Alternatives evaluated:**
 - Dense-only retrieval — excluded: misses exact control citations; baseline
   benchmark retained in RAGAs evaluation for comparison

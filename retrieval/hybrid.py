@@ -15,7 +15,10 @@ from retrieval.semantic import embed_query, get_connection
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# RRF constant — k=60 is standard; dampens impact of very high ranks
+# RRF_K=60 — standard value, empirically stable across retrieval benchmarks.
+# Lower k (e.g. 10) amplifies top-rank differences — brittle on small corpora.
+# Higher k (e.g. 100) flattens scores — loses signal between rank 1 and rank 10.
+# k=60 requires no tuning at this corpus size.
 # see docs/decision_log.md DL-008
 RRF_K = 60
 
@@ -48,9 +51,12 @@ def dense_search(conn, vector: list[float], top_k: int) -> list[dict]:
 
 def sparse_search(conn, query: str, top_k: int) -> list[dict]:
     """tsvector GIN BM25-style keyword search — sparse retrieval leg.
-    plainto_tsquery handles multi-word phrases and strips stop words safely.
-    websearch_to_tsquery is more expressive but plainto_tsquery is robust
-    for unstructured compliance queries.
+    plainto_tsquery vs to_tsquery: to_tsquery('access management') throws a
+    syntax error on raw input — requires manual 'access & management' syntax.
+    plainto_tsquery tokenizes and ANDs terms automatically — safe for
+    unstructured compliance queries. websearch_to_tsquery adds OR/NOT/phrase
+    support but compliance queries are additive; extra operators add noise,
+    not precision.
     see docs/decision_log.md DL-008"""
     with conn.cursor() as cur:
         cur.execute(
