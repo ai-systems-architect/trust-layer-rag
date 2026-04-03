@@ -25,6 +25,7 @@ NIST 800-53 / AI RMF / AI 600-1 (PDF) + FedRAMP Moderate (.docx → PDF)
         ▼
    Document Ingestion
    (PyMuPDF extraction + tiktoken chunking)
+   [production: AWS Batch job — see DL-016]
         │
         ▼
    Embedding

@@ -483,3 +483,31 @@ without meaningful security improvement.
 - Public NIST corpus — no PII, no sensitive data
 
 **Production pattern documented in docs/architecture.md**
+
+---
+
+## DL-016 — Ingestion Pipeline Compute (Production Recommendation)
+**Decision:** AWS Batch recommended for production. Not implemented — pipeline runs locally during development.
+**Date:** 2026-04-02
+
+**Rationale:** Ingestion is periodic and maintenance-only (re-run when corpus
+updates). No persistent compute infrastructure justified. AWS Batch provides
+ephemeral containers on-demand, job queue, pay-per-runtime — right fit for
+a pipeline that runs once per corpus update cycle.
+
+| Option | Verdict | Reason |
+|--------|---------|--------|
+| AWS Batch | ✅ Recommended | Ephemeral containers, job queue, pay-per-runtime, right fit for periodic pipelines |
+| ECS Fargate tasks | Viable | Same pattern, slightly less ergonomic for batch; good if already operating ECS |
+| Step Functions | Extension | Orchestration layer over Batch — adds per-step retry and error handling |
+| Lambda | ❌ Rejected | 15-min timeout, 10GB memory ceiling — insufficient for full corpus embedding |
+| EC2 persistent | ❌ Rejected | Idle cost between runs, unnecessary attack surface |
+| EKS | ❌ Rejected | Operational overhead unjustified for periodic job with no scaling requirement |
+| GCP equivalent | — | Cloud Run Jobs |
+| Azure equivalent | — | Azure Container Apps Jobs or Azure Batch |
+
+**Step Functions as natural extension:**
+Chain download → parse → embed as discrete Steps with per-step retry
+and error handling. Each stage retries independently — failed embed
+step does not re-download corpus. Adds ~50 lines of Terraform over
+a raw Batch job definition.
