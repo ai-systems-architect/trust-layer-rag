@@ -8,8 +8,8 @@ see docs/decision_log.md.
 ## Overview
 
 Governed RAG system for NIST, FISMA, and FedRAMP compliance. Ingests four
-federal regulatory documents (three PDFs via PyMuPDF, one Word document via
-python-docx), stores embeddings in pgvector,
+federal regulatory documents (three PDFs via PyMuPDF, FedRAMP Word document
+converted to PDF via LibreOffice), stores embeddings in pgvector on RDS,
 retrieves via hybrid dense + sparse fusion, re-ranks with Cohere, generates
 citation-enforced responses via Claude 3.5 Sonnet on Bedrock, and enforces
 hallucination controls via Bedrock Guardrails. Every pipeline call is traced
@@ -20,11 +20,11 @@ end-to-end in self-hosted Langfuse.
 ## Pipeline
 
 ```
-PDF / Federal Register API
+NIST 800-53 / AI RMF / AI 600-1 (PDF) + FedRAMP Moderate (.docx → PDF)
         │
         ▼
    Document Ingestion
-   (LangChain loaders + recursive character splitting)
+   (PyMuPDF extraction + tiktoken chunking)
         │
         ▼
    Embedding
@@ -59,7 +59,7 @@ Dense       Sparse
 
 | Layer | Component | Purpose |
 |---|---|---|
-| Ingestion | PyMuPDF (PDF) + python-docx (Word) | Parse and chunk four federal regulatory documents |
+| Ingestion | PyMuPDF + LibreOffice (FedRAMP conversion) | Parse and chunk four federal regulatory documents |
 | Embedding | OpenAI text-embedding-3-large | 3072-dim dense vectors |
 | Vector Store | pgvector on Amazon RDS | HNSW index, cosine similarity, single security boundary |
 | Retrieval | pgvector (dense) + tsvector (sparse) + RRF | Hybrid fusion — exact citations + semantic queries |
@@ -69,7 +69,8 @@ Dense       Sparse
 | Tracing | Langfuse (self-hosted, Docker) | End-to-end pipeline observability |
 | Evaluation | RAGAs | Faithfulness + retrieval precision scoring |
 | Frontend | Streamlit | Chat UI + debug sidebar |
-| Infrastructure | Terraform + Amazon RDS + S3 | Provisioning and storage |
+| Object Storage | Amazon S3 | Raw PDFs (raw/) + processed chunks (processed/) |
+| Infrastructure | Terraform + scripts/rds_start.py + scripts/rds_stop.py | Provisioning, RDS lifecycle management |
 
 ---
 
@@ -104,13 +105,15 @@ Bedrock Guardrails is the only hard AWS dependency by design.
 | AWS Component | GCP Equivalent |
 |---|---|
 | Amazon RDS + pgvector | AlloyDB for PostgreSQL + pgvector |
+| pgvector (managed vector DB alternative) | Vertex AI Vector Search — managed, Pinecone-equivalent on GCP |
 | Amazon Bedrock (Claude) | Vertex AI + Claude via Vertex Model Garden |
 | Amazon Bedrock Guardrails | Vertex AI Model Armor |
 | OpenAI Embeddings | Vertex AI text-embedding-004 (or keep OpenAI) |
 | Cohere Rerank | Vertex AI Ranking API |
 | LangChain orchestration | Google Agent Development Kit (ADK) — GCP-native alternative |
-| Amazon S3 | Google Cloud Storage |
+| Amazon S3 | Google Cloud Storage (GCS) — single bucket, same prefix pattern |
 | AWS IAM | GCP IAM + Workload Identity |
+| Terraform | Terraform (google provider) or Google Cloud Deployment Manager |
 | Langfuse (self-hosted) | Langfuse (self-hosted — cloud-agnostic) |
 
 ### Azure Stack
@@ -118,14 +121,88 @@ Bedrock Guardrails is the only hard AWS dependency by design.
 | AWS Component | Azure Equivalent |
 |---|---|
 | Amazon RDS + pgvector | Azure Database for PostgreSQL Flexible Server + pgvector |
+| pgvector (managed vector DB alternative) | Azure AI Search — managed, Pinecone-equivalent on Azure |
 | Amazon Bedrock (Claude) | Azure AI Foundry + Claude via Azure Marketplace |
 | Amazon Bedrock Guardrails | Azure AI Content Safety |
 | OpenAI Embeddings | Azure OpenAI Service (text-embedding-3-large — identical model) |
 | Cohere Rerank | Azure AI Search semantic ranker |
 | LangChain orchestration | LangChain (cloud-agnostic) or Azure AI Agent Service |
-| Amazon S3 | Azure Blob Storage |
+| Amazon S3 | Azure Blob Storage — single container, same prefix pattern |
 | AWS IAM | Azure Managed Identity + RBAC |
+| Terraform | Terraform (azurerm provider) or Azure Bicep |
 | Langfuse (self-hosted) | Langfuse (self-hosted — cloud-agnostic) |
+
+### Managed Vector DB Alternatives (cloud-agnostic)
+
+If compliance boundary is not a constraint, these replace pgvector entirely:
+
+| Option | Best fit |
+|---|---|
+| Pinecone | Non-regulated workloads, corpus > 1M vectors, simple API |
+| Weaviate Cloud | Multi-modal search, strong GraphQL API |
+| Qdrant Cloud | High-throughput retrieval, Rust-based performance |
+
+---
+
+## Network Architecture
+
+### Current — Portfolio Deployment
+
+```
+User Browser
+↓
+Streamlit Community Cloud (GCP us-central1) — free tier
+↓ SSL/TLS over public internet
+RDS PostgreSQL (AWS us-east-1) — public endpoint
+↓ private
+pgvector index + compliance corpus
+```
+
+Streamlit Community Cloud runs on Google Cloud Platform — outside
+AWS entirely. RDS requires a public endpoint to accept connections
+from Streamlit. Security enforced via SSL (rds.force_ssl=1) and
+strong password. Default VPC used — dedicated VPC adds complexity
+without security benefit given public endpoint requirement.
+Corpus is public NIST documents — no sensitive data.
+See docs/decision_log.md DL-015.
+
+### Production Enhancement — Full AWS Deployment
+
+Moving to production requires relocating the application layer
+inside AWS to eliminate the public RDS endpoint:
+
+```
+User Browser
+↓
+AWS Application Load Balancer (public subnet)
+↓
+ECS Fargate — Streamlit app (private subnet)
+↓ VPC internal only
+RDS PostgreSQL (private subnet) — no public endpoint
+```
+
+**Changes required:**
+- Dedicated VPC with public and private subnets across two AZs
+- ECS Fargate or EC2 for Streamlit in private subnet
+- Application Load Balancer in public subnet
+- RDS moves to private subnet — publicly_accessible = false
+- Security group: RDS accepts port 5432 from app security group only
+- SSM Session Manager for developer access — no bastion EC2 needed
+- No NAT Gateway required if Bedrock accessed via VPC endpoint
+
+**Terraform impact:**
+Application connection string does not change — only infrastructure
+topology changes. Terraform modules are structured to support this
+migration. Estimated additional Terraform: ~100 lines.
+
+### Why Not Dedicated VPC Now
+
+Dedicated VPC only provides meaningful security when the application
+layer is co-located inside AWS. With Streamlit on GCP, a dedicated
+VPC with public RDS has identical security posture to default VPC
+with public RDS — same exposure, more Terraform code. The production
+enhancement above is the architecturally correct path — documented
+here for completeness and interview discussion.
 
 ---
 

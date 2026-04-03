@@ -25,17 +25,26 @@ third-party data processors.
 **Alternatives evaluated:**
 - Pinecone — managed, simple API, excluded: data leaves AWS boundary,
   adds a third-party processor to the compliance surface
-- Weaviate (self-hosted) — excluded: additional container infra overhead
-  not warranted at this deployment scale
+- Pinecone — managed, simple API, strong ecosystem, excluded: data leaves
+  AWS boundary, adds a third-party processor to the compliance surface;
+  strong choice for non-regulated workloads or corpus > 1M vectors where
+  pgvector HNSW latency becomes a concern
+- Weaviate Cloud — managed, excluded: same third-party boundary concern
+  as Pinecone; self-hosted Weaviate viable for air-gapped deployments
+- Qdrant Cloud — performant managed vector DB, excluded: data leaves AWS
+  boundary; Qdrant self-hosted is a strong alternative to pgvector for
+  high-throughput retrieval workloads
 - ChromaDB — excluded: no production-grade managed option, local-only
   at this scale
 - AWS OpenSearch with k-NN — excluded: heavier operational footprint,
   higher cost for equivalent corpus size
 - GCP: AlloyDB with pgvector — equivalent path on GCP; same PostgreSQL
   wire protocol, pgvector supported natively, single security boundary
-  preserved
+  preserved; or Vertex AI Vector Search for managed vector DB equivalent
+  to Pinecone on GCP
 - Azure: Azure Database for PostgreSQL Flexible Server with pgvector —
-  direct equivalent; pgvector GA on Azure PostgreSQL as of 2024
+  direct equivalent; pgvector GA on Azure PostgreSQL as of 2024; or
+  Azure AI Search as managed vector DB equivalent to Pinecone on Azure
 
 ---
 
@@ -338,3 +347,123 @@ after retrieval proven on first three sources.
 
 **Future expansion:** 800-53B control baselines, NIST 800-37 RMF
 process guide — additive, zero pipeline changes required
+
+---
+
+## DL-012 — Processed Chunk Storage Format
+**Decision:** JSON (data/processed/chunks.json)
+**Date:** 2026-04-02
+
+**Rationale:** Chunks are written to JSON after ingestion and read by
+embed.py in Step 3. JSON is human-readable — chunks can be inspected,
+sampled, and debugged without tooling. Flat list of dicts maps directly
+to Python without deserialization overhead. File is written once at
+ingest time and read once at embed time — no performance requirement
+that would justify a binary format.
+
+**Alternatives evaluated:**
+- Pickle — faster serialization, excluded: not human-readable, not
+  safe to load from untrusted sources, binary format obscures debugging
+- Parquet — columnar, efficient for large datasets, excluded: overkill
+  for a one-time read of ~4,900 records; adds pyarrow dependency
+- SQLite — queryable, excluded: unnecessary complexity for a linear
+  read handoff between two pipeline steps
+- Direct in-memory handoff (no file) — excluded: decoupling ingest from
+  embed is intentional — embed.py can be re-run independently without
+  re-parsing all four source documents
+
+---
+
+## DL-013 — Object Storage
+**Decision:** AWS S3, single bucket, raw/ and processed/ prefixes
+**Date:** 2026-04-02
+
+**Rationale:** Single bucket with prefix separation keeps one IAM policy,
+one access boundary, and one audit trail — same single security boundary
+principle as pgvector on RDS. raw/ stores source PDFs as downloaded;
+processed/ stores chunks.json after ingestion. Prefixes provide logical
+separation without the operational overhead of multiple buckets.
+At corpus scale (~4,900 chunks, four PDFs) storage cost is negligible
+(<$0.01/month).
+
+**Why single bucket over multiple buckets:**
+One IAM policy covers both prefixes. Multi-bucket adds IAM complexity
+with no security benefit at this scale. Lifecycle policies and access
+controls can be scoped to prefix if needed later.
+
+**Alternatives evaluated:**
+- Multiple buckets (one per stage) — excluded: unnecessary IAM overhead,
+  no security benefit at this corpus scale
+- Local filesystem only — excluded: not reproducible across machines,
+  no durability, blocks cloud deployment
+- GCP: Google Cloud Storage (GCS) — direct equivalent; single bucket,
+  same prefix pattern, IAM via service account; gsutil or google-cloud-storage
+  Python client replaces boto3
+- Azure: Azure Blob Storage — direct equivalent; single container,
+  same prefix pattern, IAM via Managed Identity; azure-storage-blob
+  Python client replaces boto3
+
+---
+
+## DL-014 — Infrastructure Provisioning
+**Decision:** Terraform
+**Date:** 2026-04-02
+
+**Rationale:** Infrastructure as code — RDS and S3 provisioned
+reproducibly from a single terraform apply. Version-controlled in git
+alongside application code. Tear down and re-provision is deterministic.
+start/stop scripts (scripts/rds_start.py, scripts/rds_stop.py) handle
+instance lifecycle for cost management — RDS stopped state pauses
+instance-hour billing while preserving data and configuration.
+
+**Alternatives evaluated:**
+- AWS CDK — Python-native infrastructure code, excluded: AWS-only,
+  adds a compile step, heavier than needed for two resources
+- AWS SAM — serverless-focused, excluded: wrong fit for RDS + S3,
+  designed for Lambda deployments
+- Pulumi — code-first like CDK, supports multiple clouds, excluded:
+  smaller ecosystem than Terraform, less portfolio recognition
+- Manual AWS Console — excluded: not reproducible, nothing to show
+  in portfolio, error-prone across environments
+- GCP: Terraform same AWS provider swapped for google provider —
+  identical workflow; or Google Cloud Deployment Manager as native
+  GCP alternative
+- Azure: Terraform same workflow with azurerm provider — identical
+  workflow; or Azure Bicep as native Azure IaC alternative
+
+---
+
+## DL-015 — Network Architecture and RDS Access Pattern
+**Decision:** Default VPC, public RDS, SSL enforced, no dedicated VPC
+**Date:** 2026-04-02
+
+**Rationale:** Streamlit Community Cloud runs on GCP us-central1 —
+outside AWS entirely. RDS must accept connections from public internet
+regardless of VPC configuration. Dedicated VPC with public RDS adds
+Terraform complexity with zero security benefit over default VPC with
+public RDS — same exposure, more code. SSL enforced at parameter group
+level (rds.force_ssl=1) and strong generated password are the security
+layer. Corpus is public NIST documents — no sensitive data at risk.
+RDS down when not in use further minimizes exposure.
+
+**Why not dedicated VPC:**
+Dedicated VPC only provides security benefit when application layer
+is also inside AWS — RDS in private subnet, app in same VPC, no
+public endpoint needed. Streamlit Community Cloud on GCP breaks
+this model entirely. Dedicated VPC with public RDS = same security
+posture as default VPC with public RDS, with more Terraform overhead.
+
+**Why not IP restriction:**
+Streamlit Community Cloud uses GCP shared IP ranges — broad CIDR
+blocks not guaranteed stable. Whitelisting GCP ranges effectively
+opens RDS to large portions of internet. Developer IP changes across
+networks. IP restriction creates access friction for interviews
+without meaningful security improvement.
+
+**Security controls in place:**
+- SSL enforced — rds.force_ssl=1 at parameter group level
+- Strong 32-character randomly generated password in .env
+- RDS powered down when not actively used
+- Public NIST corpus — no PII, no sensitive data
+
+**Production pattern documented in docs/architecture.md**
