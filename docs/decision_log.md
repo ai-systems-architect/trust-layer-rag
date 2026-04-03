@@ -46,6 +46,22 @@ third-party data processors.
   direct equivalent; pgvector GA on Azure PostgreSQL as of 2024; or
   Azure AI Search as managed vector DB equivalent to Pinecone on Azure
 
+**Industry context — where each tool fits:**
+| Tool | Primary Use Case | Production Signal |
+|---|---|---|
+| ChromaDB | Prototyping, tutorials | Every RAG tutorial starts here — migrate before production |
+| Pinecone | Non-regulated SaaS at scale | Dominant in startups and enterprise SaaS — zero ops |
+| Weaviate | Enterprise semantic + structured search | Strong hybrid search — self-hosted for air-gapped |
+| Qdrant | Performance-focused workloads | Best-in-class filtering — self-hosted preferred in regulated |
+| pgvector | Regulated, single DB boundary | Right tool for federal context — not universal |
+
+**When pgvector is NOT the right choice:**
+At 10M+ vectors or sub-10ms P99 latency requirements Qdrant
+self-hosted outperforms meaningfully. For non-regulated
+production at scale Pinecone removes operational burden
+entirely. Provider abstraction layer in this codebase
+supports migration to either without application code changes.
+
 ---
 
 ## DL-003 — Embedding Model
