@@ -220,6 +220,23 @@ here for completeness and interview discussion.
 
 ---
 
+## Pipeline Stages
+
+Retrieval, reranking, and generation are deliberately separate stages.
+Step 4 outputs ranked chunks only — no LLM called yet. This boundary
+matters: if the right chunks are not in the top-10, nothing downstream
+recovers it. Validate retrieval in isolation before proceeding to reranking.
+
+```
+Retrieval (Step 4) → Reranking (Step 5) → Generation (Step 7)
+```
+
+Both retrievers (semantic and hybrid) return identical chunk shape so
+reranking and RAGAs evaluation (Step 8) can swap between semantic-only
+and hybrid without downstream changes.
+
+---
+
 ## Evaluation Strategy
 
 RAGAs scores measured at three pipeline stages:
