@@ -195,6 +195,19 @@ Application connection string does not change — only infrastructure
 topology changes. Terraform modules are structured to support this
 migration. Estimated additional Terraform: ~100 lines.
 
+### Vector Store — Current Choice and Migration Trigger
+
+Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
+index co-located in a single AWS boundary. One service, one IAM policy,
+one audit trail. Right-sized for this corpus (~5K chunks, <100K at scale).
+
+**When to migrate away from pgvector:**
+At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
+outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
+peak load, or corpus crosses 1M chunks. Migration path: swap the vector
+store adapter only — retrieval interface is abstracted, application code
+does not change. See docs/decision_log.md DL-002.
+
 ### Why Not Dedicated VPC Now
 
 Dedicated VPC only provides meaningful security when the application
