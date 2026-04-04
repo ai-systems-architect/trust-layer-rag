@@ -1,15 +1,6 @@
 import logging
 
-import psycopg2
-
-from config import (
-    RDS_ENDPOINT,
-    RDS_PORT,
-    RDS_DB_NAME,
-    RDS_USER,
-    RDS_PASSWORD,
-    TOP_K_RETRIEVAL,
-)
+from config import TOP_K_RETRIEVAL
 from retrieval.semantic import embed_query, get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

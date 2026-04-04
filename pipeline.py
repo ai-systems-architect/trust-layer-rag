@@ -71,4 +71,4 @@ if __name__ == "__main__":
     print(f"\nRetriever:        {output['retriever']}")
     print(f"Guardrail action: {output['guardrail_action']}")
     print(f"Trace ID:         {output['trace_id']}")
-    print(f"Langfuse:         http://localhost:3000")
+    print("Langfuse:         http://localhost:3000")
