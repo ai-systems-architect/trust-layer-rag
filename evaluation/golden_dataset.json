@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "source": "NIST 800-53",
+    "question": "Which Access Control (AC) controls enforce least privilege and separation of duties, and how are they implemented in practice?",
+    "reference_answer": "AC-6 (Least Privilege) restricts user access rights to the minimum necessary to perform assigned functions. In practice this means implementing role-based access control, avoiding shared accounts, and using AC-6(1) to authorize access to security functions explicitly and AC-6(2) to require non-privileged accounts for non-security functions. AC-5 (Separation of Duties) divides mission-critical functions among multiple individuals to prevent any single person from subverting a critical process. Implementation requires defining incompatible roles, documenting separation in access control policy, and enforcing through technical controls such that no single account can both initiate and approve a sensitive transaction."
+  },
+  {
+    "id": 2,
+    "source": "NIST 800-53",
+    "question": "AU-2 defines auditable events — how should organizations determine which events to log for high-impact systems?",
+    "reference_answer": "AU-2 requires organizations to identify the types of events that the system is capable of logging in support of the audit function, and to coordinate the event logging function with other organizations requiring audit-related information. For high-impact systems, organizations should log authentication events (successful and failed logons), privilege escalation, account management actions, policy and configuration changes, system startup and shutdown, and access to sensitive data and security functions. The selection must be reviewed and updated to reflect changes in risk and operational requirements. AU-2 does not prescribe a fixed list — the organization must determine what constitutes a meaningful audit trail given the system's threat environment and impact level."
+  },
+  {
+    "id": 3,
+    "source": "NIST 800-53",
+    "question": "What are the required components of an incident response capability, and how do IR-4 and IR-8 differ in purpose?",
+    "reference_answer": "IR-4 (Incident Handling) governs the operational response capability — the actual process of detecting, containing, eradicating, and recovering from security incidents. It requires organizations to implement an incident handling capability that includes preparation, detection, analysis, containment, eradication, and recovery phases, and to coordinate incident handling activities across the organization. IR-8 (Incident Response Plan) governs the documented artifact — the formal plan that describes the incident response capability, defines roles and responsibilities, establishes communication requirements, and provides roadmaps for implementation. IR-4 is the living operational process; IR-8 is the governing document that defines and maintains it. A system can have an IR-8 compliant plan but fail IR-4 if the operational capability is not actually exercised."
+  },
+  {
+    "id": 4,
+    "source": "NIST 800-53",
+    "question": "SC-8 and SC-28 both address data protection — how do they differ in scope, and what does a moderate-impact system need to implement for each?",
+    "reference_answer": "SC-8 (Transmission Confidentiality and Integrity) protects information during transmission — data in transit. For moderate-impact systems this typically requires implementing cryptographic mechanisms such as TLS to prevent unauthorized disclosure and modification during network transmission. SC-28 (Protection of Information at Rest) protects stored information — data at rest on storage devices, databases, and backup media. Moderate-impact systems must implement cryptographic protections for sensitive data stored on system components. The key distinction is the data state: SC-8 applies when data is moving between components; SC-28 applies when data is stored. Both may require encryption but the implementation layer differs — SC-8 is enforced at the network layer, SC-28 at the storage layer."
+  },
+  {
+    "id": 5,
+    "source": "NIST 800-53",
+    "question": "How does the CM family establish and maintain a secure configuration baseline, and what is the relationship between CM-6 and CM-7 in practice?",
+    "reference_answer": "The CM (Configuration Management) family establishes and maintains secure configuration baselines through a set of interdependent controls. CM-2 requires a documented baseline configuration of the system. CM-6 (Configuration Settings) requires establishing and documenting configuration settings for technology products that reflect the most restrictive mode consistent with operational requirements, using security configuration checklists such as DISA STIGs or CIS Benchmarks. CM-7 (Least Functionality) requires configuring the system to provide only essential capabilities, prohibiting or restricting the use of functions, ports, protocols, and services not required. CM-6 and CM-7 are complementary — CM-6 defines what the secure settings are, CM-7 enforces that unnecessary functionality is disabled. Together they establish the principle that systems should be configured to the minimum necessary capability with hardened settings for what remains enabled."
+  },
+  {
+    "id": 6,
+    "source": "NIST AI RMF",
+    "question": "How do the four core functions (Govern, Map, Measure, Manage) interact during the lifecycle of an AI system?",
+    "reference_answer": "The four core functions — Govern, Map, Measure, and Manage — are designed to be iterative and complementary across the AI lifecycle. Govern establishes the organizational policies, culture, accountability structures, and risk tolerance that frame all other functions. Map identifies the context, stakeholders, and potential risks of a specific AI system before and during deployment. Measure develops methods and metrics to analyze and assess the risks identified in Map, including testing, evaluation, and monitoring capabilities. Manage uses the outputs of Measure to prioritize and address risks through mitigation, monitoring, or system modification. In practice the functions are not strictly sequential — Measure results feed back into Map to refine risk identification, and Govern continuously shapes how all three are executed across the system lifecycle."
+  },
+  {
+    "id": 7,
+    "source": "NIST AI RMF",
+    "question": "How does the AI RMF define and categorize AI risk, and how is it different from traditional cybersecurity risk?",
+    "reference_answer": "The AI RMF defines AI risk as a composite measure of the probability that an AI system will produce a negative outcome and the magnitude of the consequences of that outcome across affected individuals and groups. This framing is broader than traditional cybersecurity risk in several important ways. Cybersecurity risk focuses primarily on threats to confidentiality, integrity, and availability of information systems from adversarial actors. AI risk additionally encompasses non-adversarial failure modes — bias, fairness harms, explainability failures, performance degradation, and unintended societal impacts — that may occur even in the absence of any attack. AI risk also explicitly accounts for impacts on third parties and society beyond the immediate system operator, whereas cybersecurity risk is typically scoped to the organization and its assets."
+  },
+  {
+    "id": 8,
+    "source": "NIST AI RMF",
+    "question": "What is an AI RMF Profile, and how should an organization use it to prioritize risk management actions across the four core functions?",
+    "reference_answer": "An AI RMF Profile is an organization's selection of functions, categories, and subcategories from the AI RMF Core that are aligned to its specific business requirements, risk tolerance, and resources for a particular AI use case or deployment context. Profiles serve two primary purposes: a Current Profile describes the organization's present state of AI risk management, and a Target Profile describes the desired future state. The gap between the two drives prioritization of risk management actions. Organizations use Profiles to tailor the framework to their specific context rather than applying all subcategories uniformly — a low-risk internal tool would have a materially different Profile than a high-stakes automated decision system affecting individuals."
+  },
+  {
+    "id": 9,
+    "source": "NIST AI RMF",
+    "question": "How does the AI RMF address third-party and supply chain AI risk, and which function is primarily responsible for managing it?",
+    "reference_answer": "The AI RMF addresses third-party and supply chain risk primarily within the Map function, which is responsible for identifying the full context of an AI system including its components, data sources, and dependencies. AI supply chain risk encompasses risks introduced by third-party data providers, pre-trained foundation models, cloud infrastructure, and software dependencies — any external component that influences system behavior but is outside the organization's direct control. The Map function requires organizations to understand and document these dependencies, assess the trustworthiness of external components, and identify risk propagation pathways. The Govern function supports this by establishing organizational policy on acceptable third-party risk and vendor due diligence requirements."
+  },
+  {
+    "id": 10,
+    "source": "NIST AI 600-1",
+    "question": "What unique risks are introduced by generative AI systems (e.g., hallucinations, data leakage), and how should they be mitigated?",
+    "reference_answer": "NIST AI 600-1 identifies several risks unique to or significantly amplified in generative AI systems. Hallucination — the generation of plausible but factually incorrect or fabricated outputs — is a fundamental risk arising from how generative models produce outputs through probabilistic token prediction rather than retrieval from verified facts. Data leakage risks arise from models potentially memorizing and reproducing training data including sensitive or proprietary information. Prompt injection represents an adversarial risk where malicious inputs manipulate model behavior. Additional risks include harmful content generation, intellectual property concerns from training data, and the difficulty of auditing model behavior. Mitigations include retrieval-augmented generation to ground outputs in verified sources, output filtering and guardrails, human review for high-stakes outputs, and transparency mechanisms that communicate model limitations to users."
+  },
+  {
+    "id": 11,
+    "source": "NIST AI 600-1",
+    "question": "In a GenAI system using proprietary data, what controls and practices are recommended to mitigate privacy and data exfiltration risks?",
+    "reference_answer": "For GenAI systems using proprietary data, NIST AI 600-1 recommends controls at multiple layers. Data governance controls include minimizing the data used for training and inference to what is strictly necessary, classifying data by sensitivity, and establishing clear data handling policies for model inputs and outputs. Technical controls include access controls on model endpoints, output filtering to detect and block reproduction of sensitive content, and monitoring of model inputs and outputs for anomalous patterns. Organizations should also assess the risk of model memorization of sensitive training data and implement de-identification or differential privacy techniques where appropriate. Contractual and organizational controls — including clear policies on what data may be used as model input and audit logging of interactions — are recommended as complementary measures."
+  },
+  {
+    "id": 12,
+    "source": "NIST AI 600-1",
+    "question": "What does NIST AI 600-1 recommend for managing prompt injection risks in GenAI systems, and at what layers should controls be applied?",
+    "reference_answer": "NIST AI 600-1 recognizes prompt injection as a significant risk for GenAI systems where malicious content in the environment — in documents, web pages, or user inputs — can manipulate model behavior by overriding system instructions or causing the model to take unintended actions. Mitigations should be applied at multiple layers. At the input layer, organizations should implement input validation and filtering to detect and block known injection patterns. At the system design layer, clear separation between system instructions and user-supplied content reduces the attack surface. At the output layer, monitoring for anomalous or policy-violating outputs provides a detection mechanism. Privilege limitation — ensuring the model and connected tools have only the minimum access necessary — limits the impact of a successful injection. Human review of high-stakes or irreversible model-initiated actions is recommended as a compensating control."
+  },
+  {
+    "id": 13,
+    "source": "NIST AI 600-1",
+    "question": "How does NIST AI 600-1 address transparency and explainability requirements for GenAI outputs, and why are these particularly difficult to satisfy compared to traditional ML systems?",
+    "reference_answer": "NIST AI 600-1 recommends that organizations deploying GenAI systems provide meaningful transparency to users about system capabilities and limitations, including communicating that outputs are AI-generated and may contain errors. Explainability in traditional ML systems typically involves feature attribution methods that identify which input features drove a prediction. GenAI systems present a significantly harder explainability challenge — outputs emerge from billions of parameters through non-linear transformations, making it practically impossible to attribute a generated output to specific training examples or input features with the same precision. NIST AI 600-1 recommends process-level transparency as a practical alternative — documenting training data sources, model architecture choices, known failure modes, and evaluation results — rather than requiring mechanistic explanation of individual outputs that current techniques cannot reliably provide."
+  },
+  {
+    "id": 14,
+    "source": "FedRAMP",
+    "question": "For a FedRAMP Moderate system, which control families are mandatory, and how do they align with NIST 800-53 baselines?",
+    "reference_answer": "FedRAMP Moderate authorization requires implementation of controls from all eighteen NIST 800-53 control families, with a baseline that selects a subset of controls from each family calibrated to moderate impact level. Key mandatory families include Access Control (AC), Audit and Accountability (AU), Configuration Management (CM), Identification and Authentication (IA), Incident Response (IR), Risk Assessment (RA), System and Communications Protection (SC), and System and Information Integrity (SI). FedRAMP augments the NIST 800-53 Moderate baseline with FedRAMP-specific parameters and additional requirements — particularly around incident reporting timelines, penetration testing, and continuous monitoring frequency — that exceed the baseline NIST controls. The FedRAMP Moderate baseline contains approximately 325 controls and control enhancements compared to the full catalog of over 1,000."
+  },
+  {
+    "id": 15,
+    "source": "FedRAMP",
+    "question": "What are the continuous monitoring requirements in FedRAMP, and how do they ensure ongoing authorization (ATO) compliance?",
+    "reference_answer": "FedRAMP continuous monitoring (ConMon) transforms the authorization from a point-in-time assessment to an ongoing process. Requirements include monthly vulnerability scanning of operating systems, web applications, and databases; annual penetration testing; and ongoing assessment of a subset of security controls. Cloud Service Providers must submit monthly ConMon deliverables to the authorizing agency including vulnerability scan results, a Plan of Action and Milestones (POA&M) tracking open findings, and an inventory of system components. Significant changes to the system require notification to the authorizing official and may require re-assessment. The ongoing monitoring process is designed to ensure that the security posture that justified the initial ATO is maintained over time and that newly discovered vulnerabilities are tracked and remediated within defined timelines."
+  },
+  {
+    "id": 16,
+    "source": "FedRAMP",
+    "question": "How does FedRAMP define the authorization boundary for a cloud service, and what are the implications for CSP vs. agency responsibility for inherited controls?",
+    "reference_answer": "FedRAMP defines the authorization boundary as the set of system components, processes, and data flows that are included within the scope of the authorization and subject to the security assessment. For cloud services, the CSP is responsible for defining and documenting the boundary clearly, including all components that process, store, or transmit federal information. Control responsibility within that boundary is divided between inherited and customer-responsible controls. Inherited controls are implemented by the CSP and accepted by the agency without requiring the agency to implement them independently — for example, physical security controls in an AWS data center are inherited by all tenants. Customer-responsible controls must be implemented by the agency or customer using the cloud service. Hybrid controls require action from both parties. The Customer Responsibility Matrix documents this division and is a required FedRAMP deliverable."
+  },
+  {
+    "id": 17,
+    "source": "FedRAMP",
+    "question": "What are the incident response reporting requirements under FedRAMP, and how do they differ from the baseline NIST 800-53 IR controls?",
+    "reference_answer": "FedRAMP establishes specific incident reporting timelines that are more prescriptive than the baseline NIST 800-53 IR controls. CSPs must report security incidents to the affected agency and to FedRAMP within one hour of detection for incidents involving a potential breach of federal data. This one-hour reporting requirement is a FedRAMP-specific augmentation — NIST 800-53 IR-6 requires reporting to designated authorities but does not specify a one-hour window. CSPs must provide an initial report within one hour, a detailed incident report within 72 hours, and a final post-incident report. FedRAMP also requires CSPs to establish and maintain an incident response capability, conduct annual incident response testing, and coordinate with US-CERT as required by federal incident reporting policy."
+  },
+  {
+    "id": 18,
+    "source": "Cross-corpus",
+    "question": "In a FedRAMP Moderate GenAI deployment, how should NIST 800-53 access controls, AI RMF risk functions, and NIST AI 600-1 risks be integrated into a unified governance model?",
+    "reference_answer": "A unified governance model for a FedRAMP Moderate GenAI deployment must integrate controls from three frameworks across the system lifecycle. NIST 800-53 access controls establish the baseline for who can interact with the system — AC-2 for account management, AC-6 for least privilege, and IA controls for authentication of users and system components. The AI RMF Govern and Map functions establish the organizational risk tolerance, accountability structures, and context-specific risk identification that frame how the AI system is designed and monitored. NIST AI 600-1 adds GenAI-specific risk controls — hallucination mitigation, prompt injection defenses, and transparency requirements — that are not addressed in the NIST 800-53 baseline. Integration requires mapping each AI 600-1 risk to the responsible control family in 800-53, embedding AI RMF risk assessments into the FedRAMP authorization process, and ensuring continuous monitoring covers both traditional security metrics and AI-specific performance and fairness metrics."
+  },
+  {
+    "id": 19,
+    "source": "Cross-corpus",
+    "question": "How does the MEASURE function of the AI RMF map to the continuous monitoring requirements in FedRAMP, and what metrics would satisfy both frameworks simultaneously?",
+    "reference_answer": "The AI RMF MEASURE function is responsible for developing methods to analyze and assess AI risks identified during Map, including quantitative and qualitative metrics, testing procedures, and ongoing monitoring capabilities. FedRAMP continuous monitoring establishes ongoing security assessment requirements including vulnerability scanning, control assessments, and POA&M tracking. Both frameworks require ongoing measurement rather than point-in-time evaluation and both emphasize the importance of metrics that are meaningful and actionable. Metrics that could satisfy both simultaneously include model performance monitoring for drift (MEASURE) combined with system integrity monitoring (FedRAMP SI controls), anomaly detection on model inputs and outputs (MEASURE) combined with audit logging requirements (FedRAMP AU controls), and periodic red-team evaluation of model behavior (MEASURE) combined with FedRAMP penetration testing requirements."
+  },
+  {
+    "id": 20,
+    "source": "Cross-corpus",
+    "question": "NIST AI 600-1 recommends transparency and documentation practices for GenAI — how do these align with the audit and accountability (AU) controls in NIST 800-53 for a FedRAMP Moderate system?",
+    "reference_answer": "NIST AI 600-1 recommends transparency practices including documenting model capabilities and limitations, communicating the AI-generated nature of outputs, and maintaining records of training data sources and evaluation results. These align closely with the NIST 800-53 AU (Audit and Accountability) control family, which requires creating and protecting audit records that support accountability, investigation, and reporting. For a FedRAMP Moderate GenAI system, AI 600-1 transparency documentation maps to AU-2 (defining auditable events to include model queries and outputs), AU-3 (ensuring audit records contain sufficient detail including model version and confidence indicators), AU-9 (protecting audit information from unauthorized modification), and AU-12 (ensuring all system components generate required audit records). The practical integration requires designing the system so that model interactions are logged with sufficient context to support both security audit requirements and AI accountability requirements within the same audit infrastructure."
+  }
+]
