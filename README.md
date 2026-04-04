@@ -28,6 +28,22 @@ Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
 
 ---
 
+## Why More Than Basic RAG
+
+Most RAG implementations stop at embed → retrieve → generate.
+This pipeline adds production layers motivated by real failure modes:
+
+| Addition | Why it exists |
+|----------|---------------|
+| Hybrid retrieval (dense + BM25 + RRF) | Keyword queries fail pure semantic search |
+| Cohere reranking | Bi-encoder similarity has a precision ceiling |
+| Bedrock Guardrails | Overclaiming risk is high in federal compliance context |
+| Langfuse tracing | Can't debug or improve what you can't observe |
+| RAGAs evaluation | Quantified retrieval quality against a golden dataset |
+| Provider abstraction layer | Model swappability without pipeline rewrites |
+
+---
+
 ## Corpus
 
 Four authoritative federal sources — no synthetic data.
@@ -43,20 +59,24 @@ Total: ~4,900 chunks — one-time ingestion cost ~$0.70 (OpenAI embeddings)
 
 ---
 
-## Build Progress
+## Pipeline
 
-| Step | Description | Status |
-|---|---|---|
-| 1 | Project Scaffold & Infrastructure | In Progress |
-| 2 | Document Ingestion Pipeline | Pending |
-| 3 | Embedding & pgvector Store | Pending |
-| 4 | Hybrid Retrieval | Pending |
-| 5 | Cohere Re-Ranker | Pending |
-| 6 | Langfuse Tracing | Pending |
-| 7 | Generation + Bedrock Guardrails + prompt versioning | Pending |
-| 8 | RAGAs Evaluation + golden dataset + score progression | Pending |
-| 9 | Streamlit Frontend + demo deploy | Pending |
-| 10 | Documentation & Decision Log | Pending |
+Queries flow through five stages:
+
+**Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate
+documents parsed, chunked, embedded, and stored in pgvector on RDS.
+
+**Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector)
+search fused via Reciprocal Rank Fusion. Returns top-10 chunks.
+
+**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores all
+10 chunks jointly against the query. Returns top-5.
+
+**Generation** — Claude 3.5 Sonnet via Amazon Bedrock with Guardrails
+applied to prevent overclaiming on compliance topics.
+
+**Evaluation** — RAGAs evaluation against a 20-question golden dataset
+covering all four corpus sources including cross-corpus synthesis questions.
 
 ---
 
@@ -120,3 +140,14 @@ export PYTHONPATH=.
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
+
+---
+
+## Future Work
+
+**System profile intake** — structured intake of system impact level, deployment
+model, and data types to condition retrieval. Enables control applicability answers
+specific to a target system rather than general corpus lookup.
+
+**Control checklist generation** — second LLM call post-retrieval to structure
+answers as actionable, system-specific control checklists rather than prose summaries.
