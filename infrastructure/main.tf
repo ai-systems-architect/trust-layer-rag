@@ -1,14 +1,14 @@
 # RDS Security Group — open on 5432, SSL is the security layer
 resource "aws_security_group" "rds" {
   name        = "governed-compliance-rds-sg"
-  description = "RDS access — SSL enforced, public corpus only"
+  description = "RDS access - SSL enforced, public corpus only"
 
   ingress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Open — Streamlit runs on GCP, IP restriction not practical. SSL + strong password is security layer."
+    description = "Open - Streamlit on GCP requires public endpoint. SSL enforced at param group level."
   }
 
   egress {
