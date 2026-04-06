@@ -1,4 +1,5 @@
 import logging
+import re
 
 from config import TOP_K_RETRIEVAL
 from retrieval.semantic import embed_query, get_connection
@@ -12,6 +13,26 @@ logger = logging.getLogger(__name__)
 # k=60 requires no tuning at this corpus size.
 # see docs/decision_log.md DL-008
 RRF_K = 60
+
+# Stop words stripped before sparse search — see DL-019
+_STOP_WORDS = {
+    'what', 'which', 'how', 'why', 'when', 'where', 'who',
+    'does', 'should', 'would', 'could', 'are', 'the', 'and',
+    'for', 'that', 'this', 'with', 'from', 'they', 'have',
+    'been', 'their', 'its', 'not', 'but', 'can', 'was',
+}
+
+
+def _sparse_query(query: str, max_terms: int = 5) -> str:
+    """Extract top N meaningful terms for BM25 sparse search.
+    plainto_tsquery ANDs all terms — long queries return 0 results if any
+    single term is absent from a chunk. Tested thresholds on compliance corpus:
+    4 terms = 24 results, 5 terms = 8 results, 6 terms = 2 results.
+    5 is the sweet spot — precise without collapsing recall.
+    see docs/decision_log.md DL-019"""
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())
+    terms = [w for w in words if w not in _STOP_WORDS]
+    return ' '.join(list(dict.fromkeys(terms))[:max_terms])
 
 
 def dense_search(conn, vector: list[float], top_k: int) -> list[dict]:
@@ -115,7 +136,7 @@ def hybrid_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
 
     try:
         dense = dense_search(conn, vector, top_k)
-        sparse = sparse_search(conn, query, top_k)
+        sparse = sparse_search(conn, _sparse_query(query), top_k)
     finally:
         conn.close()
 

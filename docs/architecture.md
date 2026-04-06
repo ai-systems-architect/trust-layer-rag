@@ -11,9 +11,9 @@ Governed RAG system for NIST, FISMA, and FedRAMP compliance. Ingests four
 federal regulatory documents (three PDFs via PyMuPDF, FedRAMP Word document
 converted to PDF via LibreOffice), stores embeddings in pgvector on RDS,
 retrieves via hybrid dense + sparse fusion, re-ranks with Cohere, generates
-citation-enforced responses via Claude 3.5 Sonnet on Bedrock, and enforces
+citation-enforced responses via Claude Sonnet 4.5 on Bedrock, and enforces
 hallucination controls via Bedrock Guardrails. Every pipeline call is traced
-end-to-end in self-hosted Langfuse.
+end-to-end in Langfuse Cloud.
 
 ---
 
@@ -29,7 +29,7 @@ NIST 800-53 / AI RMF / AI 600-1 (PDF) + FedRAMP Moderate (.docx → PDF)
         │
         ▼
    Embedding
-   (OpenAI text-embedding-3-large — 3072 dims)
+   (OpenAI text-embedding-3-large — 1536 dims, Matryoshka truncation)
         │
         ▼
    pgvector on RDS
@@ -47,7 +47,7 @@ Dense       Sparse
         │
         ▼
    Generation
-   (Claude 3.5 Sonnet via Bedrock + Bedrock Guardrails)
+   (Claude Sonnet 4.5 via Bedrock + Bedrock Guardrails)
         │
         ▼
    Langfuse Tracing
@@ -61,13 +61,13 @@ Dense       Sparse
 | Layer | Component | Purpose |
 |---|---|---|
 | Ingestion | PyMuPDF + LibreOffice (FedRAMP conversion) | Parse and chunk four federal regulatory documents |
-| Embedding | OpenAI text-embedding-3-large | 3072-dim dense vectors |
+| Embedding | OpenAI text-embedding-3-large | 1536-dim dense vectors (Matryoshka truncation — see DL-018) |
 | Vector Store | pgvector on Amazon RDS | HNSW index, cosine similarity, single security boundary |
 | Retrieval | pgvector (dense) + tsvector (sparse) + RRF | Hybrid fusion — exact citations + semantic queries |
 | Re-ranking | Cohere rerank-english-v3.0 | Cross-encoder precision over top-10 candidates |
-| Generation | Claude 3.5 Sonnet via Amazon Bedrock | Citation-enforced regulatory responses |
+| Generation | Claude Sonnet 4.5 via Amazon Bedrock | Citation-enforced regulatory responses |
 | Guardrails | Amazon Bedrock Guardrails | PII filtering + hallucination controls |
-| Tracing | Langfuse (self-hosted, Docker) | End-to-end pipeline observability |
+| Tracing | Langfuse Cloud (us.cloud.langfuse.com) | End-to-end pipeline observability |
 | Evaluation | RAGAs | Faithfulness + retrieval precision scoring |
 | Frontend | Streamlit | Chat UI + debug sidebar |
 | Object Storage | Amazon S3 | Raw PDFs (raw/) + processed chunks (processed/) |
@@ -246,6 +246,16 @@ Retrieval (Step 4) → Reranking (Step 5) → Generation (Step 7)
 Both retrievers (semantic and hybrid) return identical chunk shape so
 reranking and RAGAs evaluation (Step 8) can swap between semantic-only
 and hybrid without downstream changes.
+
+**Retriever behavior by corpus:**
+BM25 sparse retrieval fires on NIST 800-53 and FedRAMP queries where
+exact control identifiers (AC-6, IR-4, SC-28) and technical terms
+produce distinctive tokens. For AI RMF and AI 600-1 queries, governance
+language (govern, measure, trustworthy) does not survive stop word
+stripping as useful BM25 anchors — hybrid falls back to dense-only for
+these queries. Dense retrieval handles abstract governance language well
+through embedding space similarity. The use_hybrid flag allows per-query
+tuning in production; current default is hybrid-on for all queries.
 
 ---
 

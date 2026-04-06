@@ -35,8 +35,11 @@ resource "aws_db_instance" "compliance_rag" {
   identifier             = "governed-compliance-engine"
   engine                 = "postgres"
   engine_version         = "15"
-  instance_class         = "db.t3.micro"
+  instance_class         = var.db_instance_class
   allocated_storage      = 20
+  db_name                = var.db_name
+  username               = var.db_username
+  password               = var.db_password
   publicly_accessible    = true
   parameter_group_name   = aws_db_parameter_group.ssl_required.name
   vpc_security_group_ids = [aws_security_group.rds.id]

@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import subprocess
 
 import boto3

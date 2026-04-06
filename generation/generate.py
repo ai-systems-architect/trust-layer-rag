@@ -35,7 +35,7 @@ def build_user_message(query: str, chunks: list[dict]) -> str:
 
 
 def generate(query: str, chunks: list[dict]) -> dict:
-    """Call Claude 3.5 Sonnet via Bedrock converse API with Guardrails.
+    """Call Claude Sonnet 4.5 via Bedrock converse API with Guardrails.
     Guardrails applied when BEDROCK_GUARDRAIL_ID is set — prevents overclaiming
     in federal compliance context.
     see docs/decision_log.md DL-004"""

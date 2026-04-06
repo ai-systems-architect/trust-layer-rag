@@ -23,15 +23,15 @@ RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 # see docs/decision_log.md DL-003
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Embedding — OpenAI text-embedding-3-large (3072 dims)
+# Embedding — OpenAI text-embedding-3-large (1536 dims — Matryoshka truncation, see DL-018)
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "3072"))
+EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
-# Generation — Claude 3.5 Sonnet via Bedrock
+# Generation — Claude Sonnet 4.5 via Bedrock cross-region inference profile
 # see docs/decision_log.md DL-004
 GENERATION_PROVIDER = os.getenv("GENERATION_PROVIDER", "bedrock")
-GENERATION_MODEL = os.getenv("GENERATION_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+GENERATION_MODEL = os.getenv("GENERATION_MODEL", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 BEDROCK_GUARDRAIL_ID = os.getenv("BEDROCK_GUARDRAIL_ID")
 
 # Cohere — re-ranking only
@@ -39,11 +39,11 @@ BEDROCK_GUARDRAIL_ID = os.getenv("BEDROCK_GUARDRAIL_ID")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 RERANK_MODEL = os.getenv("RERANK_MODEL", "rerank-english-v3.0")
 
-# Langfuse — self-hosted tracing
+# Langfuse — Cloud tracing (us.cloud.langfuse.com)
 # see docs/decision_log.md DL-006
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")
-LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://us.cloud.langfuse.com")
 
 # Chunking
 # see docs/decision_log.md DL-007
@@ -66,11 +66,11 @@ TOP_K_RERANK = int(os.getenv("TOP_K_RERANK", "5"))
 #            (~400 chunks). AI 600-1 GenAI Profile adds AI-specific risk
 #            coverage (~300 chunks). FedRAMP enables cross-document queries
 #            mapping controls to cloud authorization baselines (~1,200 chunks).
-#            Total ~4,900 chunks — trivial for pgvector, negligible cost.
+#            Total 1,696 chunks — trivial for pgvector, negligible cost.
 # Parser: PyMuPDF for all sources — FedRAMP .docx converted to PDF via LibreOffice
 # Ingestion order: 800-53 first (validate pipeline), AI RMF second,
 #            AI 600-1 third, FedRAMP last (after retrieval proven)
-# One-time ingestion cost: ~$0.70 total (OpenAI embeddings)
+# One-time ingestion cost: ~$0.07 total (OpenAI embeddings)
 # Decision rationale: see docs/decision_log.md DL-011
 # =============================================================================
 CORPUS_SOURCES = os.getenv(
@@ -95,7 +95,7 @@ NIST_AI_600_1_URL = os.getenv(
 # LibreOffice headless conversion preserves table structure; avoids python-docx noise
 # see docs/decision_log.md DL-011
 _FEDRAMP_DEFAULT = (
-    "https://www.fedramp.gov/assets/resources/templates/"
+    "https://www.fedramp.gov/resources/templates/"
     "SSP-Appendix-A-Moderate-FedRAMP-Security-Controls.docx"
 )
 FEDRAMP_MODERATE_URL = os.getenv("FEDRAMP_MODERATE_URL", _FEDRAMP_DEFAULT)

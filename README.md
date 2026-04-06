@@ -12,12 +12,12 @@ hallucination controls, and full pipeline observability.
 | Layer | Component | Tool |
 |---|---|---|
 | Ingestion | PDF + Word parsing, chunking | PyMuPDF + python-docx |
-| Embedding | Dense vectors (3072 dims) | OpenAI text-embedding-3-large |
+| Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large |
 | Vector Store | pgvector + HNSW index | RDS PostgreSQL |
 | Retrieval | Dense + sparse fused via RRF | pgvector + tsvector |
 | Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
-| Tracing | Full pipeline observability | Langfuse (self-hosted) |
-| Generation | Citation-enforced prompts | Claude 3.5 Sonnet via Bedrock |
+| Tracing | Full pipeline observability | Langfuse Cloud |
+| Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
 | Guardrails | PII + hallucination controls | Bedrock Guardrails |
 | Evaluation | Golden dataset scoring | RAGAs |
 | Frontend | Chat UI + debug sidebar | Streamlit |
@@ -44,18 +44,46 @@ This pipeline adds production layers motivated by real failure modes:
 
 ---
 
+## Evaluation Results
+
+RAGAs evaluation against a 20-question golden dataset covering all
+four corpus sources including cross-corpus synthesis questions.
+
+| Metric | Semantic | Hybrid |
+|--------|----------|--------|
+| Faithfulness | 0.90 | 0.89 |
+| Answer Relevancy | 0.56 | 0.51 |
+| Context Precision | 0.94 | 0.95 |
+| Context Recall | 0.75 | 0.76 |
+
+Hybrid retrieval outperforms semantic on context precision, confirming
+BM25 adds signal for keyword-dominant NIST 800-53 and FedRAMP queries
+containing exact control identifiers. For AI RMF and AI 600-1 governance
+queries, dense retrieval is sufficient — governance language does not
+produce distinctive BM25 tokens.
+
+Answer relevancy scores lower than other metrics for two reasons: the
+system prompt instructs Claude to hedge and note applicability limitations
+rather than answer directly — correct behavior for federal compliance but
+penalized by this metric. Additionally, architect-level multi-part
+questions fragment RAGAs synthetic question comparison. Faithfulness
+(0.90) and context precision (0.94) are the primary quality signals
+for this use case.
+
+---
+
 ## Corpus
 
 Four authoritative federal sources — no synthetic data.
 
 | Source | Format | Chunks | Purpose |
 |---|---|---|---|
-| NIST SP 800-53 Rev 5 | PDF | ~3,000 | Master federal security control catalog |
-| NIST AI RMF 1.0 | PDF | ~400 | AI risk management — bridges to P1 portfolio project |
-| NIST AI 600-1 GenAI Profile | PDF | ~300 | AI-specific risk and trustworthiness guidance |
-| FedRAMP Moderate Baseline | Word | ~1,200 | Maps 800-53 controls to cloud authorization requirements |
+| NIST SP 800-53 Rev 5 | PDF | 1,112 | Master federal security control catalog |
+| NIST AI RMF 1.0 | PDF | 50 | AI risk management — bridges to P1 portfolio project |
+| NIST AI 600-1 GenAI Profile | PDF | 92 | AI-specific risk and trustworthiness guidance |
+| FedRAMP Moderate Baseline | Word | 442 | Maps 800-53 controls to cloud authorization requirements |
 
-Total: ~4,900 chunks — one-time ingestion cost ~$0.70 (OpenAI embeddings)
+Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 
 ---
 
@@ -72,7 +100,7 @@ search fused via Reciprocal Rank Fusion. Returns top-10 chunks.
 **Reranking** — Cohere rerank-english-v3.0 cross-encoder scores all
 10 chunks jointly against the query. Returns top-5.
 
-**Generation** — Claude 3.5 Sonnet via Amazon Bedrock with Guardrails
+**Generation** — Claude Sonnet 4.5 via Amazon Bedrock with Guardrails
 applied to prevent overclaiming on compliance topics.
 
 **Evaluation** — RAGAs evaluation against a 20-question golden dataset
@@ -113,20 +141,17 @@ export PYTHONPATH=.
 - AWS CLI configured with Bedrock access
 - OpenAI API key
 - Cohere API key
-- Docker (for Langfuse)
+- Langfuse account (Cloud — us.cloud.langfuse.com)
 - PostgreSQL RDS instance with pgvector extension (provisioned via Terraform in Step 1)
 
 ---
 
 ## RAGAs Score Progression
 
-*Populated after Step 8 — dense-only baseline vs hybrid+rerank delta.*
-
 | Pipeline Stage | Faithfulness | Context Precision | Context Recall | Answer Relevancy |
 |---|---|---|---|---|
-| Dense-only baseline | — | — | — | — |
-| Hybrid retrieval (RRF) | — | — | — | — |
-| Hybrid + Cohere rerank | — | — | — | — |
+| Dense-only (semantic) baseline | 0.90 | 0.94 | 0.75 | 0.56 |
+| Hybrid retrieval (RRF + BM25) | 0.89 | 0.95 | 0.76 | 0.51 |
 
 ---
 
@@ -134,7 +159,7 @@ export PYTHONPATH=.
 
 | Component | Cost |
 |---|---|
-| One-time ingestion (OpenAI embeddings) | ~$0.70 |
+| One-time ingestion (OpenAI embeddings) | ~$0.07 |
 | Development (RDS + Bedrock + Cohere) | ~$15–30 total |
 | Live demo (RDS t3.micro + Bedrock per query) | ~$17–20/month |
 | Langfuse, Streamlit Community Cloud | $0 |
@@ -152,13 +177,41 @@ specific to a target system rather than general corpus lookup.
 **Control checklist generation** — second LLM call post-retrieval to structure
 answers as actionable, system-specific control checklists rather than prose summaries.
 
-**Conversational memory** — short-term session context is maintained in Streamlit
-session state. Long-term memory across sessions — storing user system profile and
-prior queries — would enable personalized retrieval conditioned on the user's
-specific compliance context and progress.
+**Conversational memory** — short-term session context is implemented in Streamlit:
+conversation history (concatenated prior Q+A turns) is passed to Claude at generation
+time, so answers are contextually aware within a session.
+
+What is not implemented: conversation history does not influence the retrieval query.
+Each query hits pgvector as a standalone question regardless of prior turns. A user
+who asked about AC-6 then asks "what about logging requirements" — the retriever
+searches only on the second question, not the enriched context. Retrieval-side memory
+would inject recent turns into the query before embedding, surfacing chunks relevant
+to the full conversation thread rather than the isolated question.
+
+Long-term memory across sessions — persisting user system profile (impact level,
+deployment model, control families reviewed) in RDS keyed by user ID — is not
+implemented. Would enable the system to answer "given your Moderate-impact SaaS
+system, here are the AC controls you still need to address" rather than answering
+generically on every session.
+
+Implementation patterns: query enrichment with recent turns for short-term retrieval
+memory, vector memory (embed prior interactions, retrieve relevant past context
+alongside corpus chunks) for long-term. Pairs with system profile intake future work
+item.
 
 **PII filtering** — production deployment requires PII detection and redaction at
 query input (before embedding), corpus ingestion (before chunking), and generated
 output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.
 Langfuse traces should be scrubbed at source to prevent PII persistence in the
 observability store. See docs/decision_log.md DL-017.
+
+**Metadata filtering** — production deployment would benefit from pre-filtering chunks
+by source document, impact level, or control family before vector search. Current
+implementation searches the full corpus for every query. As corpus expands —
+agency-specific SSPs, additional NIST publications, vendor documentation — unfiltered
+search introduces noise from irrelevant documents. Implementation: add source,
+impact_level, and control_family metadata columns to the chunks table, filter via SQL
+WHERE clause before HNSW search. Pairs naturally with system profile intake — once
+the user's system impact level is known, retrieval can be scoped to the relevant
+baseline automatically. At current four-document scale, full corpus search is fast and
+filtering would reduce recall.

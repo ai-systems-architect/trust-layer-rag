@@ -1,6 +1,6 @@
 import logging
 
-from config import TOP_K_RETRIEVAL, TOP_K_RERANK
+from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
 from retrieval.semantic import semantic_search
 from retrieval.hybrid import hybrid_search
 from retrieval.rerank import rerank
@@ -71,4 +71,4 @@ if __name__ == "__main__":
     print(f"\nRetriever:        {output['retriever']}")
     print(f"Guardrail action: {output['guardrail_action']}")
     print(f"Trace ID:         {output['trace_id']}")
-    print("Langfuse:         http://localhost:3000")
+    print(f"Langfuse:         {LANGFUSE_HOST}")

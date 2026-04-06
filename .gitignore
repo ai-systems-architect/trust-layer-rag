@@ -10,3 +10,17 @@ venv/
 
 # Checkpoints — local planning docs, not versioned
 CHECKPOINT*.md
+
+# macOS
+.DS_Store
+
+# Data — generated at ingest time, not versioned
+data/
+
+# Terraform state — contains sensitive infrastructure values
+infrastructure/terraform.tfstate
+infrastructure/terraform.tfstate.backup
+infrastructure/.terraform/
+
+# Claude Code
+.claude/

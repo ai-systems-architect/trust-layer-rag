@@ -75,16 +75,25 @@ def build_ragas_dataset(results: list[dict]) -> Dataset:
     })
 
 
+def _mean(val) -> float:
+    """Extract scalar mean from a RAGAs metric result.
+    Newer RAGAs versions return a list of per-question scores instead of
+    a pre-aggregated float — handle both."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    return sum(float(v) for v in val if v is not None) / max(len([v for v in val if v is not None]), 1)
+
+
 def score_dataset(dataset: Dataset) -> dict:
     """Run RAGAs evaluation on the dataset. Returns metric scores as floats.
     RAGAs uses OpenAI internally for faithfulness and answer_relevancy scoring —
     OPENAI_API_KEY must be set in .env."""
     result = evaluate(dataset, metrics=METRICS)
     return {
-        "faithfulness": round(float(result["faithfulness"]), 4),
-        "answer_relevancy": round(float(result["answer_relevancy"]), 4),
-        "context_precision": round(float(result["context_precision"]), 4),
-        "context_recall": round(float(result["context_recall"]), 4),
+        "faithfulness": round(_mean(result["faithfulness"]), 4),
+        "answer_relevancy": round(_mean(result["answer_relevancy"]), 4),
+        "context_precision": round(_mean(result["context_precision"]), 4),
+        "context_recall": round(_mean(result["context_recall"]), 4),
     }
 
 

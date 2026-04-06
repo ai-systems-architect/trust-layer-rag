@@ -4,7 +4,7 @@ from pipeline import run_pipeline
 
 # --- page config ---
 st.set_page_config(
-    page_title="Federal Compliance Assistant",
+    page_title="Governed Compliance Assistant",
     page_icon="🏛️",
     layout="wide",
 )
@@ -30,7 +30,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**Observability**")
-    st.markdown("[Langfuse traces →](http://localhost:3000)")
+    st.markdown("[Langfuse traces →](https://us.cloud.langfuse.com)")
 
     st.divider()
     st.caption(
@@ -39,11 +39,12 @@ with st.sidebar:
     )
 
 # --- main ---
-st.title("🏛️ Federal Compliance Assistant")
+st.title("🏛️ Governed Compliance Assistant")
 st.caption(
-    "RAG pipeline over NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate. "
-    "Hybrid retrieval · Cohere reranking · Claude 3.5 Sonnet · Bedrock Guardrails."
+    "Research assistant over NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate. "
+    "Not an official government tool."
 )
+st.caption("Hybrid retrieval · Cohere reranking · Claude Sonnet 4.5 · Bedrock Guardrails")
 
 # initialize chat history
 if "messages" not in st.session_state:

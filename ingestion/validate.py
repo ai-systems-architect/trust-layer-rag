@@ -11,14 +11,13 @@ CHUNKS_PATH = Path(_CHUNKS_PATH)
 REQUIRED_FIELDS = {"text", "source", "display_name", "version", "date", "page",
                    "chunk_index", "chunk_id"}
 
-# Ranges derived from DL-011 chunk estimates with ~35% buffer on each side.
-# Wide intentionally — estimates are pre-run. Tighten to ±15% after first
-# successful ingest once actual counts are known.
+# Ranges tightened to ±15% after first successful ingest (2026-04-06).
+# Actual counts: nist_800_53=1112, nist_ai_rmf=50, nist_ai_600_1=92, fedramp=442
 EXPECTED_COUNTS = {
-    "nist_800_53":               (2000, 4000),  # estimate ~3,000
-    "nist_ai_rmf":               (200,  700),   # estimate ~400
-    "nist_ai_600_1":             (100,  600),   # estimate ~300
-    "fedramp_moderate_baseline": (700,  2000),  # estimate ~1,200
+    "nist_800_53":               (944,  1278),  # actual 1112
+    "nist_ai_rmf":               (42,   57),    # actual 50
+    "nist_ai_600_1":             (78,   105),   # actual 92
+    "fedramp_moderate_baseline": (375,  508),   # actual 442
 }
 
 
