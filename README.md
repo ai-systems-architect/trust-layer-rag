@@ -152,6 +152,11 @@ specific to a target system rather than general corpus lookup.
 **Control checklist generation** — second LLM call post-retrieval to structure
 answers as actionable, system-specific control checklists rather than prose summaries.
 
+**Conversational memory** — short-term session context is maintained in Streamlit
+session state. Long-term memory across sessions — storing user system profile and
+prior queries — would enable personalized retrieval conditioned on the user's
+specific compliance context and progress.
+
 **PII filtering** — production deployment requires PII detection and redaction at
 query input (before embedding), corpus ingestion (before chunking), and generated
 output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.

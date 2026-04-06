@@ -216,6 +216,11 @@ peak load, or corpus crosses 1M chunks. Migration path: swap the vector
 store adapter only — retrieval interface is abstracted, application code
 does not change. See docs/decision_log.md DL-002.
 
+**If corpus expands beyond current four documents:**
+Metadata filtering by source or impact level recommended — pgvector WHERE
+clause pre-filter before HNSW search reduces candidate set and improves
+precision without schema changes.
+
 ### Why Not Dedicated VPC Now
 
 Dedicated VPC only provides meaningful security when the application
