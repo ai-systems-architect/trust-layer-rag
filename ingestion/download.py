@@ -63,9 +63,15 @@ def convert_docx_to_pdf(docx_path: Path) -> Path:
         logger.info("Already converted, skipping: %s", pdf_path.name)
         return pdf_path
 
-    logger.info("Converting %s to PDF via LibreOffice", docx_path.name)
+    # Mac: Homebrew installs as 'soffice'. Linux/EC2/Docker: 'libreoffice'.
+    # LIBREOFFICE_CMD env var overrides — default covers both platforms.
+    import shutil
+    lo_cmd = os.getenv("LIBREOFFICE_CMD") or (
+        "soffice" if shutil.which("soffice") else "libreoffice"
+    )
+    logger.info("Converting %s to PDF via LibreOffice (%s)", docx_path.name, lo_cmd)
     subprocess.run(
-        ["libreoffice", "--headless", "--convert-to", "pdf",
+        [lo_cmd, "--headless", "--convert-to", "pdf",
          "--outdir", str(docx_path.parent), str(docx_path)],
         check=True
     )
