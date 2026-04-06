@@ -81,7 +81,8 @@ def _mean(val) -> float:
     a pre-aggregated float — handle both."""
     if isinstance(val, (int, float)):
         return float(val)
-    return sum(float(v) for v in val if v is not None) / max(len([v for v in val if v is not None]), 1)
+    valid = [float(v) for v in val if v is not None]
+    return sum(valid) / max(len(valid), 1)
 
 
 def score_dataset(dataset: Dataset) -> dict:
