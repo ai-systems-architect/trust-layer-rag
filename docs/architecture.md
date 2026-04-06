@@ -77,11 +77,23 @@ Dense       Sparse
 
 ## Security Boundary
 
-All data at rest and in transit stays within the AWS VPC. RDS is not
-publicly accessible — application layer connects via VPC private subnet.
-IAM roles control Bedrock and S3 access. No embeddings or document chunks
-leave the AWS environment. Langfuse runs locally — traces do not leave
-the development machine.
+**Current portfolio deployment:** RDS has a public endpoint (required for
+Streamlit Community Cloud on GCP — see DL-015). SSL enforced via
+rds.force_ssl=1. Corpus is public NIST documents — no sensitive data at risk.
+
+**Data that leaves AWS in current deployment:**
+- OpenAI text-embedding-3-large — query text sent to OpenAI at embed time
+- Cohere rerank-english-v3.0 — top-10 chunks sent to Cohere at rerank time
+- Langfuse Cloud (us.cloud.langfuse.com) — pipeline traces including query text
+
+**Data that stays in AWS:**
+- pgvector on RDS — all embeddings and corpus chunks
+- Amazon Bedrock — generation stays within AWS managed boundary
+- S3 — raw PDFs and processed chunks
+
+**Production path:** Move Streamlit inside AWS (ECS Fargate, private subnet),
+remove public RDS endpoint, swap OpenAI for Titan embed and Cohere for Bedrock
+rerank — full AWS boundary achieved. See Network Architecture section below.
 
 ---
 
@@ -115,7 +127,7 @@ Bedrock Guardrails is the only hard AWS dependency by design.
 | Amazon S3 | Google Cloud Storage (GCS) — single bucket, same prefix pattern |
 | AWS IAM | GCP IAM + Workload Identity |
 | Terraform | Terraform (google provider) or Google Cloud Deployment Manager |
-| Langfuse (self-hosted) | Langfuse (self-hosted — cloud-agnostic) |
+| Langfuse Cloud | Langfuse Cloud (cloud-agnostic) or self-hosted on GKE |
 
 ### Azure Stack
 
@@ -127,11 +139,11 @@ Bedrock Guardrails is the only hard AWS dependency by design.
 | Amazon Bedrock Guardrails | Azure AI Content Safety |
 | OpenAI Embeddings | Azure OpenAI Service (text-embedding-3-large — identical model) |
 | Cohere Rerank | Azure AI Search semantic ranker |
-| LangChain orchestration | LangChain (cloud-agnostic) or Azure AI Agent Service |
+| LangChain orchestration | LangChain (cloud-agnostic) or Semantic Kernel — Microsoft-native orchestration framework |
 | Amazon S3 | Azure Blob Storage — single container, same prefix pattern |
 | AWS IAM | Azure Managed Identity + RBAC |
 | Terraform | Terraform (azurerm provider) or Azure Bicep |
-| Langfuse (self-hosted) | Langfuse (self-hosted — cloud-agnostic) |
+| Langfuse Cloud | Langfuse Cloud (cloud-agnostic) or self-hosted on AKS |
 
 ### Managed Vector DB Alternatives (cloud-agnostic)
 
@@ -270,5 +282,5 @@ RAGAs scores measured at three pipeline stages:
 | Hybrid + Cohere rerank | Same metrics — delta vs hybrid |
 
 Score progression table committed to README after Step 8.
-Golden dataset: 50 hand-curated Q&A pairs built after seeing real
+Golden dataset: 20-question architect-level Q&A set built after seeing real
 retrieval failures in Steps 3–5.

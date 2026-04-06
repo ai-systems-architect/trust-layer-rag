@@ -330,6 +330,10 @@ requires no custom instrumentation.
   multi-agent pipelines, excluded: optimized for Vertex AI and GCP-native
   tooling; adds GCP dependency to an AWS-native stack; strong alternative
   if deploying on GCP with Vertex AI as the model provider
+- Azure: Semantic Kernel — Microsoft-native orchestration framework with
+  first-class Azure OpenAI and Azure AI Foundry integration; direct
+  equivalent to LangChain for Azure-first stacks; LangChain also runs
+  cloud-agnostic on Azure with no changes
 - Custom pipeline (no framework) — excluded: significant boilerplate for
   retrieval chain, prompt management, and callback hooks; framework
   overhead justified at this pipeline complexity

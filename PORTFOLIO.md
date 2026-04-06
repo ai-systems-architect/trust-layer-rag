@@ -271,5 +271,6 @@ access control logging, not generic AU chunks.
 
 ---
 
-*Single AWS boundary. Langfuse Cloud observability. RAGAs evaluated.
-Bedrock Guardrails enforced. NIST AI RMF aligned.*
+*Generation and vector store within AWS boundary. RAGAs evaluated.
+Bedrock Guardrails enforced. GCP and Azure equivalents documented.
+NIST AI RMF aligned.*
