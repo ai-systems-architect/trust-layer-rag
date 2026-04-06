@@ -167,6 +167,13 @@ without security benefit given public endpoint requirement.
 Corpus is public NIST documents — no sensitive data.
 See docs/decision_log.md DL-015.
 
+### PII Filtering (Production Requirement)
+
+Production deployments require PII filtering at three layers: query input
+before embedding, corpus ingestion before chunking, and generated output
+before UI rendering. Langfuse traces must be scrubbed at source to prevent
+PII persistence in the observability store. See docs/decision_log.md DL-017.
+
 ### Production Enhancement — Full AWS Deployment
 
 Moving to production requires relocating the application layer

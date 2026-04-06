@@ -151,3 +151,9 @@ specific to a target system rather than general corpus lookup.
 
 **Control checklist generation** — second LLM call post-retrieval to structure
 answers as actionable, system-specific control checklists rather than prose summaries.
+
+**PII filtering** — production deployment requires PII detection and redaction at
+query input (before embedding), corpus ingestion (before chunking), and generated
+output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.
+Langfuse traces should be scrubbed at source to prevent PII persistence in the
+observability store. See docs/decision_log.md DL-017.
