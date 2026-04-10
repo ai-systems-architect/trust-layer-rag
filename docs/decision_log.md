@@ -534,6 +534,25 @@ without meaningful security improvement.
 
 ---
 
+## DL-015a — FedRAMP Source Document Format
+**Decision:** Convert FedRAMP Moderate .docx to PDF via LibreOffice headless at download time before parse stage.
+**Date:** 2026-03-31
+
+**Issue discovered:** FedRAMP Moderate Baseline source document is published as .docx.
+Ingestion pipeline is PDF-only — PyMuPDF parser accepts only PDF input. Discovered at
+ingestion time when download.py attempted to pass .docx directly to parse.py.
+
+**Resolution:** LibreOffice headless conversion in download.py before upload to S3.
+Pipeline receives PDF for all four corpus sources regardless of original format.
+Conversion is transparent to all downstream stages.
+
+**Alternatives considered:**
+- python-docx direct parsing — excluded: would require a parallel parser branch,
+  breaks single-responsibility pipeline design
+- Manual pre-conversion — excluded: not reproducible, breaks automated ingestion
+
+---
+
 ## DL-016 — Ingestion Pipeline Compute (Production Recommendation)
 **Decision:** AWS Batch recommended for production. Not implemented — pipeline runs locally during development.
 **Date:** 2026-04-02

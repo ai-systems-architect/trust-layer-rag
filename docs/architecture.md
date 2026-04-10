@@ -269,6 +269,11 @@ these queries. Dense retrieval handles abstract governance language well
 through embedding space similarity. The use_hybrid flag allows per-query
 tuning in production; current default is hybrid-on for all queries.
 
+**Conversational memory boundary:** Streamlit passes concatenated prior Q+A turns to
+Claude at generation time — answers are contextually aware within a session.
+Conversation history does not condition the retrieval query — each query hits pgvector
+as a standalone question regardless of prior turns. See Future Work in README.
+
 ---
 
 ## Evaluation Strategy
