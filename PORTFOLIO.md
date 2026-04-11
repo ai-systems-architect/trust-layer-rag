@@ -98,7 +98,7 @@ additional layer here exists because of a specific production failure mode.
 | Langfuse Cloud tracing | Cannot debug or improve what cannot be observed — every retrieval, rerank, and generation call traced end-to-end |
 | RAGAs evaluation against golden dataset | Quantified retrieval quality, not subjective assessment — semantic vs hybrid comparison produces a defensible result |
 | Provider abstraction layer | Embedding and generation models swappable via environment variables without pipeline rewrites |
-| Single AWS boundary | Query, retrieved chunks, and generated response never leave AWS — Bedrock for generation, RDS for vector store, S3 for corpus |
+| AWS boundary for corpus and generation | Corpus vectors remain in AWS (RDS pgvector + S3). Query text is sent to OpenAI for embedding. Top-10 retrieved chunks are sent to Cohere for reranking. Traces are sent to Langfuse Cloud. Generation stays within AWS via Bedrock |
 
 ---
 

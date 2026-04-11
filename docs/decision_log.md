@@ -790,3 +790,34 @@ architecture with use_hybrid flag allows the pipeline to be tuned per
 query type in production.
 
 **Scores locked. No further tuning.**
+
+---
+
+**Failure Analysis — Known Cases and Root Causes:**
+
+1. **BM25 sparse=0 on AI RMF and AI 600-1 queries** — governance language (govern,
+   measure, trustworthy, supply chain risk) does not survive stop word stripping as
+   distinctive BM25 tokens. Dense-only fallback is correct behavior — abstract governance
+   language is better served by embedding space similarity than vocabulary matching.
+
+2. **Control identifiers truncated by 5-term BM25 limit** — AC-2 or IR-4 appearing after
+   position 5 in `_sparse_query()` output are dropped before passing to `plainto_tsquery`.
+   Regex pre-extraction of control IDs before term limiting is the documented fix (DL-019
+   future enhancement) — not yet implemented.
+
+3. **Answer relevancy below 0.70 target** — system prompt compliance hedging behavior
+   penalized by RAGAs, which rewards direct concise answers. Qualifying language
+   ("this depends on your specific system configuration") is correct for federal compliance
+   but scores lower on this metric by design. Not fixable without weakening safety behavior.
+
+4. **RAGAs multi-part question fragmentation** — synthetic question generation for
+   architect-level multi-part questions (e.g. "how do SC-8 and SC-28 differ in scope,
+   and what does a moderate-impact system need to implement for each?") produces synthetic
+   questions that only partially overlap with the original. Known limitation of the
+   evaluation metric for complex question sets — not a pipeline quality issue.
+
+5. **First hybrid evaluation run invalid** — BM25 sparse=0 bug was present during the
+   initial RAGAs run. Hybrid retrieval was functionally identical to semantic for all 20
+   questions because sparse retrieval was not firing. Scores appeared equal — not because
+   hybrid adds no value, but because the comparison was broken. Re-run after DL-019 fix
+   produced correct results showing hybrid signal on keyword-dominant queries.

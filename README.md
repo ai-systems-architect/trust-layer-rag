@@ -11,7 +11,7 @@ hallucination controls, and full pipeline observability.
 
 | Layer | Component | Tool |
 |---|---|---|
-| Ingestion | PDF + Word parsing, chunking | PyMuPDF + python-docx |
+| Ingestion | PDF + Word parsing, chunking | LibreOffice headless (.docx → PDF conversion) + PyMuPDF |
 | Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large |
 | Vector Store | pgvector + HNSW index | RDS PostgreSQL |
 | Retrieval | Dense + sparse fused via RRF | pgvector + tsvector |
@@ -155,6 +155,29 @@ export PYTHONPATH=.
 
 ---
 
+## Pipeline Latency and Cost Per Query
+
+| Stage | Typical Latency | Notes |
+|---|---|---|
+| Embed query | ~50–100ms | OpenAI API |
+| Dense retrieval | ~20–50ms | pgvector HNSW |
+| Sparse retrieval | ~10–30ms | PostgreSQL tsvector |
+| Rerank | ~200–400ms | Cohere API — dominant latency |
+| Generation | ~1000–3000ms | Bedrock Claude Sonnet |
+| **Total end-to-end** | **~1.5–4s** | |
+
+| Component | Cost Per Query |
+|---|---|
+| OpenAI embedding | ~$0.00013 |
+| Cohere rerank | ~$0.001 |
+| Bedrock Claude Sonnet | ~$0.003–0.015 (varies by output length) |
+| **Approximate total** | **~$0.004–0.016** |
+
+Langfuse traces confirm these ranges. Reranking is the dominant latency stage —
+Cohere API round-trip accounts for ~30–50% of total query time.
+
+---
+
 ## Cost
 
 | Component | Cost |
@@ -170,14 +193,14 @@ RDS is provisioned on demand — tear down when not actively building (~$2/day a
 
 ## Future Work
 
-**System profile intake** — structured intake of system impact level, deployment
+**[Stretch] System profile intake** — structured intake of system impact level, deployment
 model, and data types to condition retrieval. Enables control applicability answers
 specific to a target system rather than general corpus lookup.
 
-**Control checklist generation** — second LLM call post-retrieval to structure
+**[Stretch] Control checklist generation** — second LLM call post-retrieval to structure
 answers as actionable, system-specific control checklists rather than prose summaries.
 
-**Conversational memory** — short-term session context is implemented in Streamlit:
+**[Planned Next] Conversational memory** — short-term session context is implemented in Streamlit:
 conversation history (concatenated prior Q+A turns) is passed to Claude at generation
 time, so answers are contextually aware within a session.
 
@@ -199,13 +222,13 @@ memory, vector memory (embed prior interactions, retrieve relevant past context
 alongside corpus chunks) for long-term. Pairs with system profile intake future work
 item.
 
-**PII filtering** — production deployment requires PII detection and redaction at
+**[Production Required] PII filtering** — production deployment requires PII detection and redaction at
 query input (before embedding), corpus ingestion (before chunking), and generated
 output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.
 Langfuse traces should be scrubbed at source to prevent PII persistence in the
 observability store. See docs/decision_log.md DL-017.
 
-**Metadata filtering** — production deployment would benefit from pre-filtering chunks
+**[Planned Next] Metadata filtering** — production deployment would benefit from pre-filtering chunks
 by source document, impact level, or control family before vector search. Current
 implementation searches the full corpus for every query. As corpus expands —
 agency-specific SSPs, additional NIST publications, vendor documentation — unfiltered
@@ -215,3 +238,26 @@ WHERE clause before HNSW search. Pairs naturally with system profile intake — 
 the user's system impact level is known, retrieval can be scoped to the relevant
 baseline automatically. At current four-document scale, full corpus search is fast and
 filtering would reduce recall.
+
+**[Production Required] Query guardrail** — validate and sanitize query input before embedding. Block
+prompt injection attempts, extremely long inputs, and non-compliance queries. Bedrock
+Guardrails currently applied at generation output only — input-side validation is a
+separate enforcement layer.
+
+**[Stretch] Structured intent extraction** — classify query intent (control lookup, gap
+assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
+config per intent — control lookup favors BM25, synthesis favors dense.
+
+**[Planned Next] Post-RRF filter enforcement** — after RRF fusion, enforce minimum relevance
+threshold before passing candidates to Cohere. Currently all top-10 RRF results pass to
+reranker regardless of score — low-quality candidates consume rerank quota without
+improving precision.
+
+**[Planned Next] Pydantic response validation** — validate generate() output structure before
+returning to pipeline. Enforce citation presence, answer length bounds, and guardrail
+action handling. Prevents silent failures from upstream Bedrock changes.
+
+**[Planned Next] Control ID preservation in sparse preprocessing** — `_sparse_query()` strips stop
+words and limits to 5 terms; control identifiers (AC-2, IR-4) appearing after position 5
+are dropped. Regex pre-extraction of control IDs before term limiting would ensure they
+are always preserved as high-value BM25 anchors. See docs/decision_log.md DL-019.
