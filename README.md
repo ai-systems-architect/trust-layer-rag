@@ -248,6 +248,11 @@ separate enforcement layer.
 assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
 config per intent — control lookup favors BM25, synthesis favors dense.
 
+**[Stretch] Context entities recall** — RAGAs entity-level retrieval metric to verify key
+identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
+Recall@k and MRR baselines are established — entity recall is a refinement on standard
+retrieval diagnostics, not a replacement.
+
 **[Planned Next] Post-RRF filter enforcement** — after RRF fusion, enforce minimum relevance
 threshold before passing candidates to Cohere. Currently all top-10 RRF results pass to
 reranker regardless of score — low-quality candidates consume rerank quota without
