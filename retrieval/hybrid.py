@@ -29,10 +29,27 @@ def _sparse_query(query: str, max_terms: int = 5) -> str:
     single term is absent from a chunk. Tested thresholds on compliance corpus:
     4 terms = 24 results, 5 terms = 8 results, 6 terms = 2 results.
     5 is the sweet spot — precise without collapsing recall.
+
+    Control IDs (AC-2, IR-4, MAP-1.1) are extracted from the original query
+    before any lowercasing or term limiting. Lowercasing destroys the uppercase
+    pattern; the alpha-only regex then splits AC-2 into 'ac' (no signal) and
+    drops '2' entirely. Pre-extraction preserves the full identifier as a
+    high-value BM25 anchor regardless of its position in the query.
     see docs/decision_log.md DL-019"""
+    # step 1: extract control identifiers from original query before lowercasing.
+    # pattern covers: AC-2, IR-4, SC-28, AU-12(3), MAP-1.1, CM-7
+    # must run on original query — lowercasing destroys the uppercase pattern
+    control_ids = re.findall(r'\b[A-Z]{1,3}-\d+(?:\(\d+\))?(?:\.\d+)?\b', query)
+    control_ids = list(dict.fromkeys(control_ids))  # deduplicate, preserve order
+
+    # step 2: fill remaining slots with stop-word-stripped regular terms.
+    # control IDs take priority — they occupy the first slots in the term list
+    remaining_slots = max(max_terms - len(control_ids), 0)
     words = re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())
     terms = [w for w in words if w not in _STOP_WORDS]
-    return ' '.join(list(dict.fromkeys(terms))[:max_terms])
+    regular_terms = list(dict.fromkeys(terms))[:remaining_slots]
+
+    return ' '.join(control_ids + regular_terms)
 
 
 def dense_search(conn, vector: list[float], top_k: int) -> list[dict]:
@@ -134,15 +151,19 @@ def hybrid_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
     vector = embed_query(query)
     conn = get_connection()
 
+    # preprocess query for BM25 — control IDs extracted first, then stop word strip
+    # log the preprocessed string so sparse=0 cases are diagnosable in Langfuse traces
+    sparse_q = _sparse_query(query)
+
     try:
         dense = dense_search(conn, vector, top_k)
-        sparse = sparse_search(conn, _sparse_query(query), top_k)
+        sparse = sparse_search(conn, sparse_q, top_k)
     finally:
         conn.close()
 
     logger.info(
-        "hybrid_search: dense=%d sparse=%d for query=%r",
-        len(dense), len(sparse), query[:60],
+        "hybrid_search: dense=%d sparse=%d sparse_query=%r original_query=%r",
+        len(dense), len(sparse), sparse_q, query[:60],
     )
 
     results = reciprocal_rank_fusion(dense, sparse)

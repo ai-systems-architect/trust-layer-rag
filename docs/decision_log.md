@@ -669,29 +669,35 @@ plainto_tsquery('Which Access Control (AC) controls enforce least privilege...')
 | 5 | 8 |
 | 6 | 2 |
 
-**Known limitation:** Control identifiers (AC-2, IR-4, SC-28) may be excluded by
-stop word stripping if they appear after the 5-term limit. Regex pre-extraction of
-control IDs recommended before term limiting — these are high-value BM25 targets
-and should always be preserved.
+**Known limitation — Resolved 2026-04-13:** Control identifiers (AC-2, IR-4, SC-28)
+were excluded by lowercasing + alpha-only regex before the 5-term limit applied.
+`query.lower()` destroyed the uppercase pattern; `re.findall(r'\b[a-zA-Z]{3,}\b', ...)`
+split `ac-2` into `ac` (no BM25 signal) and dropped `2`. Fix applied — see below.
 
 **Fix:** `_sparse_query()` in `retrieval/hybrid.py` — strips stop words, extracts
 3+ character tokens, deduplicates, limits to 5 terms before passing to `sparse_search`.
+
+**Control ID pre-extraction — Implemented 2026-04-13:**
+`_sparse_query()` now extracts control identifiers from the original query before
+any lowercasing using `r'\b[A-Z]{1,3}-\d+(?:\(\d+\))?(?:\.\d+)?\b'`. Covers
+AC-2, IR-4, SC-28, AU-12(3), MAP-1.1. IDs occupy the first slots in the term list;
+remaining `max_terms - len(control_ids)` slots filled by regular stop-word-stripped
+terms. Total remains ≤ 5 terms passed to `plainto_tsquery`.
+Preprocessed sparse query string now logged in `hybrid_search` alongside `sparse=N`
+count for Langfuse trace visibility.
 
 **Impact:** RAGAs evaluation with sparse=0 produced invalid hybrid comparison.
 Re-evaluation after fix required to produce meaningful semantic vs hybrid delta.
 
 **Future monitoring:**
-- Log `sparse_query` alongside `sparse=N` in hybrid_search — makes it visible
-  when preprocessing produces an empty or weak query string
-- If `sparse=0` reappears in Langfuse traces, check `_sparse_query` output for
-  that query — likely a query composed entirely of stop words or 1-2 char tokens
+- `sparse_query` now logged alongside `sparse=N` in hybrid_search — visible in
+  Langfuse traces when preprocessing produces an empty or weak query string
+- If `sparse=0` reappears in Langfuse traces, check `sparse_query` log for that
+  query — likely a query composed entirely of stop words or 1-2 char tokens
 - Revisit `max_terms` if corpus expands significantly — larger corpus means more
   chunks per term, 5-term threshold may become too loose
 
-**Future enhancement:**
-- Extract control identifiers (AC-2, IR-4, SC-28) via regex before stop word
-  stripping — control IDs are high-value BM25 targets and should always be
-  included in the sparse query regardless of term limit
+**Remaining future enhancement:**
 - Consider `websearch_to_tsquery` for queries with explicit quoted phrases —
   allows exact phrase matching for control names like "least privilege"
 
