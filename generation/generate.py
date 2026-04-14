@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
-
 import boto3
+from pydantic import BaseModel, field_validator
 
 from config import (
     AWS_REGION,
@@ -11,6 +11,42 @@ from config import (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Response validation — Pydantic model for generate() output
+# Validates structure before the dict reaches pipeline.py. Raises
+# ValidationError on unexpected Bedrock API shape changes rather than
+# propagating a silent bad value downstream.
+# see docs/decision_log.md DL-004
+# ---------------------------------------------------------------------------
+
+_KNOWN_STOP_REASONS = {"end_turn", "max_tokens", "guardrail_intervened", "content_filtered"}
+
+
+class GenerateResponse(BaseModel):
+    answer: str
+    model: str
+    stop_reason: str
+    guardrail_action: str
+
+    @field_validator("answer")
+    @classmethod
+    def answer_not_empty(cls, v: str) -> str:
+        if not v or len(v.strip()) < 10:
+            raise ValueError(f"answer too short or empty: {v!r}")
+        return v
+
+    @field_validator("stop_reason")
+    @classmethod
+    def stop_reason_known(cls, v: str) -> str:
+        if v not in _KNOWN_STOP_REASONS:
+            # log a warning but do not raise — Bedrock may add new values
+            logger.warning(
+                "generate: unexpected stop_reason %r — expected one of %s", v, _KNOWN_STOP_REASONS
+            )
+        return v
+
 
 # System prompt — governs answer tone, scope, and citation behavior
 # see prompts/system_prompt.txt
@@ -76,9 +112,11 @@ def generate(query: str, chunks: list[dict]) -> dict:
         GENERATION_MODEL, stop_reason, guardrail_action,
     )
 
-    return {
-        "answer": answer,
-        "model": GENERATION_MODEL,
-        "stop_reason": stop_reason,
-        "guardrail_action": guardrail_action,
-    }
+    # validate response structure — raises ValidationError on bad shape
+    validated = GenerateResponse(
+        answer=answer,
+        model=GENERATION_MODEL,
+        stop_reason=stop_reason,
+        guardrail_action=guardrail_action,
+    )
+    return validated.model_dump()
