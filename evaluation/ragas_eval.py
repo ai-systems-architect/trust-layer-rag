@@ -35,11 +35,16 @@ METRICS = [faithfulness, answer_relevancy, context_precision, context_recall]
 
 
 def load_golden_dataset() -> list[dict]:
-    """Load 20-question golden dataset from JSON."""
+    """Load positive questions from golden dataset — excludes negative test entries.
+    Negative entries (test_type='negative') are used by guardrail_test.py, not RAGAs."""
     with open(GOLDEN_DATASET_PATH) as f:
         dataset = json.load(f)
-    logger.info("Loaded %d questions from golden dataset", len(dataset))
-    return dataset
+    positive = [q for q in dataset if q.get("test_type") != "negative"]
+    logger.info(
+        "Loaded %d positive questions from golden dataset (%d total, %d negative excluded)",
+        len(positive), len(dataset), len(dataset) - len(positive),
+    )
+    return positive
 
 
 def run_eval_pipeline(questions: list[dict], use_hybrid: bool) -> list[dict]:

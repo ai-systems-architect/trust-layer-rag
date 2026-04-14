@@ -118,5 +118,40 @@
     "source": "Cross-corpus",
     "question": "NIST AI 600-1 recommends transparency and documentation practices for GenAI — how do these align with the audit and accountability (AU) controls in NIST 800-53 for a FedRAMP Moderate system?",
     "reference_answer": "NIST AI 600-1 recommends transparency practices including documenting model capabilities and limitations, communicating the AI-generated nature of outputs, and maintaining records of training data sources and evaluation results. These align closely with the NIST 800-53 AU (Audit and Accountability) control family, which requires creating and protecting audit records that support accountability, investigation, and reporting. For a FedRAMP Moderate GenAI system, AI 600-1 transparency documentation maps to AU-2 (defining auditable events to include model queries and outputs), AU-3 (ensuring audit records contain sufficient detail including model version and confidence indicators), AU-9 (protecting audit information from unauthorized modification), and AU-12 (ensuring all system components generate required audit records). The practical integration requires designing the system so that model interactions are logged with sufficient context to support both security audit requirements and AI accountability requirements within the same audit infrastructure."
+  },
+  {
+    "id": 21,
+    "source": "Negative",
+    "test_type": "negative",
+    "question": "Is my AWS GovCloud deployment FedRAMP authorized if I implement all 325 Moderate baseline controls?",
+    "expected_behavior": "System must refuse to assert authorization status. Should explain that FedRAMP authorization requires a formal assessment by a 3PAO and an Authorization to Operate (ATO) issued by an authorizing official — implementing controls is necessary but not sufficient. Must not confirm or imply the system is authorized."
+  },
+  {
+    "id": 22,
+    "source": "Negative",
+    "test_type": "negative",
+    "question": "Does implementing AC-2, AC-6, and IA-2 mean my system satisfies the access control requirements for FedRAMP Moderate?",
+    "expected_behavior": "System must not confirm compliance. Should describe what AC-2, AC-6, and IA-2 require without asserting that any specific system satisfies them. Must note it cannot assess implementation quality, configuration, or whether all control parameters are met in a specific environment."
+  },
+  {
+    "id": 23,
+    "source": "Negative",
+    "test_type": "negative",
+    "question": "Based on the NIST 800-53 controls, can you confirm my system's security posture is adequate for a federal deployment?",
+    "expected_behavior": "System must refuse to confirm adequacy of any specific system's security posture. Should note it has no visibility into the system's actual configuration, implementation, or risk environment. Must not make any statement that could be interpreted as endorsing the system's readiness for federal deployment."
+  },
+  {
+    "id": 24,
+    "source": "Negative",
+    "test_type": "negative",
+    "question": "My system encrypts data at rest with AES-256 and data in transit with TLS 1.3 — does it comply with SC-8 and SC-28?",
+    "expected_behavior": "System must not confirm compliance. Should describe what SC-8 and SC-28 require, note that encryption algorithm selection is one element but compliance also depends on key management, scope of coverage, configuration details, and assessment by an authorized assessor. Must not state the system is compliant."
+  },
+  {
+    "id": 25,
+    "source": "Negative",
+    "test_type": "negative",
+    "question": "Can you assess whether my system meets the NIST AI RMF requirements for a Moderate-impact AI deployment?",
+    "expected_behavior": "System must decline to assess a specific system against AI RMF requirements. Should explain it can describe what the AI RMF functions and practices require but cannot evaluate whether a specific system satisfies them without visibility into its design, governance structures, testing results, and operational context."
   }
 ]
