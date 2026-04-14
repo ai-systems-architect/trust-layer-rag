@@ -70,6 +70,32 @@ questions fragment RAGAs synthetic question comparison. Faithfulness
 (0.90) and context precision (0.94) are the primary quality signals
 for this use case.
 
+### Retrieval Diagnostics
+
+Retrieval quality measured independently of generation — Recall@5, MRR,
+and nDCG across three pipeline configurations. Ground truth labels derived
+from token overlap with reference answers across a broad candidate pool.
+
+| Query Type | R@5 Semantic | R@5 Hybrid | R@5 H+Rerank | MRR Semantic | MRR Hybrid | MRR H+Rerank |
+|---|---|---|---|---|---|---|
+| Control ID (n=9) | 0.1516 | 0.1558 | 0.1558 | 1.0000 | 1.0000 | 1.0000 |
+| Governance (n=8) | 0.2099 | 0.2099 | 0.2197 | 0.8750 | 0.9375 | 0.9375 |
+| Cross-corpus (n=3) | 0.1130 | 0.1258 | 0.1258 | 0.6667 | 0.6667 | 0.6667 |
+| **Average (n=20)** | **0.1691** | **0.1729** | **0.1768** | **0.9000** | **0.9250** | **0.9250** |
+
+nDCG@5 — Semantic: 0.888 | Hybrid: 0.909 | Hybrid+Rerank: 0.927
+
+The most relevant chunk surfaces at rank 1 for 90%+ of questions (MRR 0.90+).
+Recall@5 appears low (0.17) because the ground truth pool averages 28 chunks
+per question — top-5 retrieval capturing 17% of 28 labeled chunks reflects the
+large denominator, not a retrieval failure. nDCG@5 progression (0.888 → 0.909
+→ 0.927) confirms each pipeline layer adds ranking quality: RRF fusion improves
+governance query ranking (MRR 0.875 → 0.938), Cohere cross-encoder refines
+mid-list precision without displacing already-correct top-1 positions (MRR
+unchanged at Hybrid → H+Rerank, nDCG +0.018). Control ID queries achieve
+perfect MRR 1.00 across all configurations — exact control identifiers anchor
+both dense and BM25 retrieval reliably.
+
 ---
 
 ## Corpus

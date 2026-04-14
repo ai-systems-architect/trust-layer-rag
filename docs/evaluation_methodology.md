@@ -174,17 +174,17 @@ Questions are grouped by type to show where each retrieval configuration adds va
 
 ### Results table structure
 
-```
-| Query Type        | Recall@5 Sem | Recall@5 Hyb | Recall@5 H+R | MRR Sem | MRR Hyb | MRR H+R |
-|-------------------|--------------|--------------|--------------|---------|---------|---------|
-| Control ID (n=9)  |              |              |              |         |         |         |
-| Governance (n=8)  |              |              |              |         |         |         |
-| Cross-corpus (n=3)|              |              |              |         |         |         |
-| Average (n=20)    |              |              |              |         |         |         |
-```
+| Query Type | R@5 Semantic | R@5 Hybrid | R@5 H+Rerank | MRR Semantic | MRR Hybrid | MRR H+Rerank |
+|---|---|---|---|---|---|---|
+| Control ID (n=9) | 0.1516 | 0.1558 | 0.1558 | 1.0000 | 1.0000 | 1.0000 |
+| Governance (n=8) | 0.2099 | 0.2099 | 0.2197 | 0.8750 | 0.9375 | 0.9375 |
+| Cross-corpus (n=3) | 0.1130 | 0.1258 | 0.1258 | 0.6667 | 0.6667 | 0.6667 |
+| **Average (n=20)** | **0.1691** | **0.1729** | **0.1768** | **0.9000** | **0.9250** | **0.9250** |
 
-nDCG@5 is computed per-question and summarized as a single average row beneath
-the main table — it does not segment cleanly by query type at this dataset size.
+nDCG@5 — Semantic: 0.8883 | Hybrid: 0.9092 | Hybrid+Rerank: 0.9265
+
+nDCG@5 is computed per-question and summarized as a single average row —
+it does not segment cleanly by query type at this dataset size.
 
 ### Interpretation guide
 
