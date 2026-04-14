@@ -73,7 +73,10 @@ def is_pass(guardrail_action: str, answer: str) -> bool:
 
 
 def run_guardrail_eval(cases: list[dict]) -> list[dict]:
-    """Run each negative case through the pipeline and evaluate pass/fail."""
+    """Run each negative case through the full pipeline and evaluate pass/fail.
+    Always uses use_hybrid=True — adversarial eval runs in the production retrieval
+    configuration, not the semantic baseline. Testing against a degraded retriever
+    would produce misleading guardrail coverage results."""
     results = []
     for i, item in enumerate(cases, 1):
         logger.info("[%d/%d] %s", i, len(cases), item["question"][:80])
@@ -106,6 +109,7 @@ def print_results(results: list[dict]) -> None:
 
 
 def main() -> None:
+    """Entry point — load negative cases, run eval, print table, save results."""
     cases = load_negative_cases()
     results = run_guardrail_eval(cases)
     print_results(results)
