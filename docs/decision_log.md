@@ -827,3 +827,32 @@ query type in production.
    questions because sparse retrieval was not firing. Scores appeared equal — not because
    hybrid adds no value, but because the comparison was broken. Re-run after DL-019 fix
    produced correct results showing hybrid signal on keyword-dominant queries.
+
+---
+
+## DL-021 — Evaluation Methodology Reference Document
+**Date:** 2026-04-14
+
+**Decision:** Retrieval diagnostic metric formulas (Recall@k, MRR, nDCG) and RAGAs
+metric selection rationale extracted to `docs/evaluation_methodology.md` as a standalone
+reference document.
+
+**Rationale:** Metric definitions, labeling methodology, architectural interpretation
+guidance, and query type classification are too detailed to inline in decision log entries
+or README. A dedicated document makes the evaluation reproducible — anyone running
+the diagnostics has a single reference covering what each metric measures, how ground
+truth was derived, and how to interpret the results table.
+
+**Document covers:**
+- RAGAs metric hierarchy and why answer relevancy is below target by design
+- Recall@k, MRR, nDCG formulas with worked examples
+- Ground truth auto-labeling methodology and its known limitation
+- Query type classification (Control ID / Governance / Cross-corpus)
+- Corrected 6-column results table structure (all three configs for both Recall@5 and MRR)
+- Architectural interpretation guide — what each Semantic → Hybrid → Hybrid+Rerank
+  delta tells you about which layer drives ranking quality
+
+**Interview reference:** MRR Hybrid (before reranking) is the most architecturally
+informative column — isolates RRF fusion contribution independently of Cohere reranking.
+If MRR jumps at Hybrid, BM25 fusion drives rank quality. If MRR jumps at Hybrid+Rerank,
+Cohere is the primary ranking layer. Both are valid with different cost optimization implications.
