@@ -4,7 +4,7 @@ from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
 from retrieval.semantic import semantic_search
 from retrieval.hybrid import hybrid_search
 from retrieval.rerank import rerank
-from generation.generate import generate
+from generation.generate import generate, check_guardrail
 from tracing.tracer import get_langfuse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -13,9 +13,34 @@ logger = logging.getLogger(__name__)
 
 def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
     """End-to-end compliance query pipeline with Langfuse tracing.
-    retrieve → rerank → generate — each stage traced as a child span.
+    input guardrail → retrieve → rerank → generate → output guardrail
+    Each stage traced as a child span. Input guardrail short-circuits before
+    retrieval fires — blocked queries return immediately with no downstream cost.
     use_hybrid=True (default); set False for semantic-only baseline (RAGAs Step 8).
-    see docs/decision_log.md DL-008, DL-006"""
+    see docs/decision_log.md DL-008, DL-006, DL-022"""
+
+    # --- input guardrail gate ---
+    # Runs before retrieval — blocks prompt injection, off-topic queries,
+    # and jailbreak patterns without invoking pgvector, Cohere, or Claude.
+    # No Langfuse trace created for blocked queries — they are cheap and
+    # do not represent pipeline execution worth observing.
+    guardrail_check = check_guardrail(query, source="INPUT")
+    if guardrail_check["blocked"]:
+        logger.info("run_pipeline: query blocked by input guardrail")
+        return {
+            "query": query,
+            "retriever": "blocked",
+            "chunks": [],
+            "answer": (
+                "Your query was blocked by the input guardrail. "
+                "Please ask a compliance-related question about NIST 800-53, "
+                "AI RMF, AI 600-1, or FedRAMP."
+            ),
+            "model": None,
+            "guardrail_action": guardrail_check["action"],
+            "trace_id": None,
+        }
+
     lf = get_langfuse()
     trace = lf.trace(
         name="compliance-query",

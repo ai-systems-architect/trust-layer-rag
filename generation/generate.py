@@ -48,6 +48,45 @@ class GenerateResponse(BaseModel):
         return v
 
 
+# ---------------------------------------------------------------------------
+# Input guardrail — standalone check via apply_guardrail API
+# Separate from the converse guardrailConfig (which runs at generation time).
+# apply_guardrail lets the pipeline short-circuit BEFORE retrieval fires —
+# no pgvector query, no Cohere call, no Bedrock generation invocation.
+#
+# source="INPUT"  — query check in pipeline.py before retrieval
+# source="OUTPUT" — handled inline by converse guardrailConfig in generate()
+#
+# apply_guardrail quota note: each call counts against Bedrock guardrail
+# quota (~50–100ms latency). In high-volume production, a lightweight
+# keyword pre-filter should gate the Bedrock call to reduce cost and latency.
+# see docs/decision_log.md DL-022
+# ---------------------------------------------------------------------------
+
+
+def check_guardrail(text: str, source: str = "INPUT") -> dict:
+    """Apply Bedrock Guardrail to text at a specified pipeline stage.
+    Returns {"action": str, "blocked": bool}.
+
+    No-ops if BEDROCK_GUARDRAIL_ID is not configured — allows the pipeline
+    to run without guardrails in development environments.
+    source must be 'INPUT' or 'OUTPUT' per Bedrock apply_guardrail API."""
+    if not BEDROCK_GUARDRAIL_ID:
+        return {"action": "NONE", "blocked": False}
+
+    client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+    response = client.apply_guardrail(
+        guardrailIdentifier=BEDROCK_GUARDRAIL_ID,
+        guardrailVersion="DRAFT",
+        source=source,
+        content=[{"text": {"text": text}}],
+    )
+    action = response.get("action", "NONE")
+    blocked = action == "GUARDRAIL_INTERVENED"
+    logger.info("check_guardrail: source=%s action=%s", source, action)
+    return {"action": action, "blocked": blocked}
+
+
 # System prompt — governs answer tone, scope, and citation behavior
 # see prompts/system_prompt.txt
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"

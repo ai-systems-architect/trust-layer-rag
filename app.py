@@ -103,11 +103,12 @@ if query := st.chat_input("Ask a compliance question…"):
                 st.caption(chunk["text"][:300].strip() + "…")
                 st.divider()
 
-        # metadata row
+        # metadata row — trace_id is None when input guardrail blocks early
         cols = st.columns(3)
-        cols[0].caption(f"Retriever: `{'hybrid' if use_hybrid else 'semantic'}`")
+        cols[0].caption(f"Retriever: `{output['retriever']}`")
         cols[1].caption(f"Guardrail: `{output['guardrail_action']}`")
-        cols[2].caption(f"Trace: `{output['trace_id']}`")
+        trace_label = output["trace_id"] if output["trace_id"] else "blocked"
+        cols[2].caption(f"Trace: `{trace_label}`")
 
     # save to session state
     st.session_state.messages.append({

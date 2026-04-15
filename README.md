@@ -115,22 +115,34 @@ Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 
 ## Pipeline
 
-Queries flow through five stages:
+```
+query → [Input Guardrail] → Retrieval → Reranking → Generation → [Output Guardrail] → response
+```
 
-**Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate
-documents parsed, chunked, embedded, and stored in pgvector on RDS.
+Dual guardrail architecture — input gate blocks before retrieval fires, output gate
+prevents overclaiming after generation. A blocked input query costs one Bedrock
+apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
-**Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector)
-search fused via Reciprocal Rank Fusion. Returns top-10 chunks.
+**Input Guardrail** — Bedrock Guardrails `apply_guardrail` API checks the raw query
+before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak
+patterns with no downstream token cost.
 
-**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores all
-10 chunks jointly against the query. Returns top-5.
+**Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents
+parsed, chunked, embedded, and stored in pgvector on RDS.
 
-**Generation** — Claude Sonnet 4.5 via Amazon Bedrock with Guardrails
-applied to prevent overclaiming on compliance topics.
+**Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused
+via Reciprocal Rank Fusion. Returns top-10 chunks.
 
-**Evaluation** — RAGAs evaluation against a 20-question golden dataset
-covering all four corpus sources including cross-corpus synthesis questions.
+**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores all 10 chunks
+jointly against the query. Returns top-5.
+
+**Generation** — Claude Sonnet 4.5 via Amazon Bedrock.
+
+**Output Guardrail** — Bedrock Guardrails `guardrailConfig` on the converse call.
+Catches overclaiming, compliance status assertions, and misconduct in generated answers.
+
+**Evaluation** — RAGAs evaluation against a 20-question golden dataset covering all
+four corpus sources including cross-corpus synthesis questions.
 
 ---
 
