@@ -581,26 +581,45 @@ a raw Batch job definition.
 
 ---
 
-## DL-017 — PII Filtering (Production Requirement, Not Implemented)
-**Decision:** PII filtering identified as production requirement. Not implemented — corpus contains no PII, system is a portfolio project.
-**Date:** 2026-04-03
+## DL-017 — PII Filtering
+**Date:** 2026-04-03 (initial) / 2026-04-14 (implemented)
 
-**Rationale:** The current corpus (NIST 800-53, AI RMF, AI 600-1, FedRAMP Moderate
-Baseline) contains no PII. User queries in a portfolio context are test queries only.
-PII filtering is documented here as a required production concern for any deployment
-where federal agency users submit real system information or where corpus includes
-SSPs, incident reports, or other documents containing PII.
+**Decision:** Presidio-based PII filtering implemented at query input and generated
+output. Corpus ingestion hook documented but not applied — federal compliance
+documents contain no PII.
 
-| Surface | Risk | Recommended mitigation |
-|---------|------|------------------------|
-| User query | PII in query sent to OpenAI embed and Bedrock | Presidio redaction before embed_query() |
-| Corpus ingestion | SSPs or incident reports may contain PII | Presidio scan at chunk time before embed |
-| Generated output | LLM may echo query PII in answer | Output scan before UI render |
-| Langfuse traces | PII persists in observability store | Scrub at input, mask in Langfuse config |
+**Tool selection: Presidio (dev/portfolio) vs AWS Comprehend (production)**
 
-**Recommended tools:**
-- Microsoft Presidio — open source, entity recognition + anonymization, self-hosted
-- AWS Comprehend — managed PII detection, stays in AWS boundary, integrates with existing stack
+| Dimension | Presidio | AWS Comprehend |
+|-----------|----------|----------------|
+| Hosting | Local — in-process | Managed AWS API |
+| Data boundary | Never leaves Python process before scrubbing | Stays in AWS |
+| Latency | ~10–30ms | ~100–200ms |
+| PII entity types | 50+ | 16 |
+| Cost | Free | ~$0.0001/query |
+| Production signal | Open source, shows library knowledge | Full AWS ecosystem alignment |
+
+Presidio is the correct choice for this project — query text is scrubbed in-process
+before any external API call. AWS Comprehend is the correct production choice when
+fully managed infrastructure within the AWS account boundary is preferred.
+
+**Integration points implemented:**
+
+| Surface | Risk | Implementation |
+|---------|------|----------------|
+| Query input | PII in query sent to OpenAI (embedding) and Cohere (rerank) | `scrub(query)` in pipeline.py before retrieval |
+| Generated output | LLM may echo query PII in answer | `scrub(answer)` in generate.py before return |
+| Langfuse traces | PII persists in observability store | pipeline.py passes `query_clean` to all trace spans |
+| Corpus ingestion | SSPs or incident reports may contain PII | Hook exists via `scrub()` in utils/pii_filter.py; not applied — corpus is PII-free |
+
+**PII order in pipeline:**
+`query → scrub → guardrail → retrieval → rerank → generation → scrub answer → response`
+Scrub runs before guardrail so Bedrock trace logs also receive clean content.
+
+**Entity types detected:** PERSON, EMAIL_ADDRESS, PHONE_NUMBER, US_SSN, CREDIT_CARD,
+IP_ADDRESS, US_DRIVER_LICENSE, US_PASSPORT, IBAN_CODE, US_BANK_NUMBER, MEDICAL_LICENSE.
+LOCATION and DATE_TIME excluded — compliance queries legitimately reference AWS regions
+and FedRAMP authorization dates.
 
 **GCP equivalent:** Cloud DLP (Data Loss Prevention) — managed PII detection and redaction
 **Azure equivalent:** Azure AI Language PII detection — managed, same pattern

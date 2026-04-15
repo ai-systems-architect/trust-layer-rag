@@ -6,6 +6,7 @@ from retrieval.hybrid import hybrid_search
 from retrieval.rerank import rerank
 from generation.generate import generate, check_guardrail
 from tracing.tracer import get_langfuse
+from utils.pii_filter import scrub
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -19,12 +20,18 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
     use_hybrid=True (default); set False for semantic-only baseline (RAGAs Step 8).
     see docs/decision_log.md DL-008, DL-006, DL-022"""
 
+    # --- PII scrub ---
+    # Scrub query before any external service call (OpenAI embedding, Cohere rerank,
+    # Bedrock). Original query retained for user-facing display only.
+    # query_clean is passed to all downstream stages including Langfuse traces.
+    # see docs/decision_log.md DL-017
+    query_clean = scrub(query)
+
     # --- input guardrail gate ---
-    # Runs before retrieval — blocks prompt injection, off-topic queries,
-    # and jailbreak patterns without invoking pgvector, Cohere, or Claude.
-    # No Langfuse trace created for blocked queries — they are cheap and
-    # do not represent pipeline execution worth observing.
-    guardrail_check = check_guardrail(query, source="INPUT")
+    # Receives scrubbed query — PII stripped before reaching Bedrock trace logs.
+    # Blocks prompt injection, off-topic queries, and jailbreak patterns without
+    # invoking pgvector, Cohere, or Claude generation.
+    guardrail_check = check_guardrail(query_clean, source="INPUT")
     if guardrail_check["blocked"]:
         logger.info("run_pipeline: query blocked by input guardrail")
         return {
@@ -44,26 +51,27 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
     lf = get_langfuse()
     trace = lf.trace(
         name="compliance-query",
-        input={"query": query, "retriever": "hybrid" if use_hybrid else "semantic"},
+        # query_clean in trace — scrubbed version logged to Langfuse Cloud
+        input={"query": query_clean, "retriever": "hybrid" if use_hybrid else "semantic"},
     )
 
     try:
         # --- retrieve ---
-        span = trace.span(name="retrieve", input={"query": query, "use_hybrid": use_hybrid})
+        span = trace.span(name="retrieve", input={"query": query_clean, "use_hybrid": use_hybrid})
         if use_hybrid:
-            chunks = hybrid_search(query, top_k=TOP_K_RETRIEVAL)
+            chunks = hybrid_search(query_clean, top_k=TOP_K_RETRIEVAL)
         else:
-            chunks = semantic_search(query, top_k=TOP_K_RETRIEVAL)
+            chunks = semantic_search(query_clean, top_k=TOP_K_RETRIEVAL)
         span.end(output={"chunk_count": len(chunks)})
 
         # --- rerank ---
         span = trace.span(name="rerank", input={"chunk_count": len(chunks)})
-        reranked = rerank(query, chunks, top_k=TOP_K_RERANK)
+        reranked = rerank(query_clean, chunks, top_k=TOP_K_RERANK)
         span.end(output={"chunk_count": len(reranked)})
 
         # --- generate ---
         span = trace.span(name="generate", input={"chunk_count": len(reranked)})
-        result = generate(query, reranked)
+        result = generate(query_clean, reranked)
         span.end(output={
             "answer_preview": result["answer"][:200],
             "guardrail_action": result["guardrail_action"],

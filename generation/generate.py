@@ -8,6 +8,7 @@ from config import (
     GENERATION_MODEL,
     BEDROCK_GUARDRAIL_ID,
 )
+from utils.pii_filter import scrub
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -150,6 +151,10 @@ def generate(query: str, chunks: list[dict]) -> dict:
         "generate: model=%s stop_reason=%s guardrail_action=%s",
         GENERATION_MODEL, stop_reason, guardrail_action,
     )
+
+    # scrub PII from answer before returning — catches cases where query PII
+    # was echoed in the generated response (e.g., "John Smith needs AC-2...")
+    answer = scrub(answer)
 
     # validate response structure — raises ValidationError on bad shape
     validated = GenerateResponse(
