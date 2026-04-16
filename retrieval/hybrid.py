@@ -52,19 +52,61 @@ def _sparse_query(query: str, max_terms: int = 5) -> str:
     return ' '.join(control_ids + regular_terms)
 
 
-def dense_search(conn, vector: list[float], top_k: int) -> list[dict]:
-    """pgvector HNSW cosine search — dense retrieval leg."""
+def _build_where(
+    extra_clauses: list[str],
+    base_clause: str = "",
+) -> str:
+    """Combine a mandatory base clause with optional metadata filter clauses.
+
+    base_clause is the tsvector match expression (sparse leg only) — always
+    present when supplied. extra_clauses are metadata AND conditions appended
+    on top. Returns a complete WHERE ... string or empty string if nothing
+    to filter on.
+    """
+    all_clauses = ([base_clause] if base_clause else []) + extra_clauses
+    return ("WHERE " + " AND ".join(all_clauses)) if all_clauses else ""
+
+
+def dense_search(
+    conn,
+    vector: list[float],
+    top_k: int,
+    source: str | None = None,
+    control_family: str | None = None,
+    impact_level: str | None = None,
+) -> list[dict]:
+    """pgvector HNSW cosine search — dense retrieval leg.
+
+    Optional metadata pre-filters applied before the HNSW sweep.
+    Filters are AND-combined; None values are skipped.
+    see docs/decision_log.md DL-023"""
+    filter_clauses: list[str] = []
+    filter_params: list = []
+
+    if source is not None:
+        filter_clauses.append("source = %s")
+        filter_params.append(source)
+    if control_family is not None:
+        filter_clauses.append("control_family = %s")
+        filter_params.append(control_family)
+    if impact_level is not None:
+        filter_clauses.append("impact_level = %s")
+        filter_params.append(impact_level)
+
+    where_sql = _build_where(filter_clauses)
+    sql = f"""
+        SELECT chunk_id, source, display_name, page, chunk_index, text
+        FROM chunks
+        {where_sql}
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s;
+    """
+    params = filter_params + [vector, top_k]
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT chunk_id, source, display_name, page, chunk_index, text
-            FROM chunks
-            ORDER BY embedding <=> %s::vector
-            LIMIT %s;
-            """,
-            (vector, top_k),
-        )
+        cur.execute(sql, params)
         rows = cur.fetchall()
+
     return [
         {
             "chunk_id": row[0],
@@ -78,30 +120,60 @@ def dense_search(conn, vector: list[float], top_k: int) -> list[dict]:
     ]
 
 
-def sparse_search(conn, query: str, top_k: int) -> list[dict]:
+def sparse_search(
+    conn,
+    query: str,
+    top_k: int,
+    source: str | None = None,
+    control_family: str | None = None,
+    impact_level: str | None = None,
+) -> list[dict]:
     """tsvector GIN BM25-style keyword search — sparse retrieval leg.
+
     plainto_tsquery vs to_tsquery: to_tsquery('access management') throws a
     syntax error on raw input — requires manual 'access & management' syntax.
     plainto_tsquery tokenizes and ANDs terms automatically — safe for
     unstructured compliance queries. websearch_to_tsquery adds OR/NOT/phrase
     support but compliance queries are additive; extra operators add noise,
     not precision.
-    see docs/decision_log.md DL-008"""
+
+    Optional metadata pre-filters are ANDed with the tsvector match clause —
+    they narrow the full-text candidate set before ts_rank scoring.
+    see docs/decision_log.md DL-008, DL-023"""
+    filter_clauses: list[str] = []
+    filter_params: list = []
+
+    if source is not None:
+        filter_clauses.append("source = %s")
+        filter_params.append(source)
+    if control_family is not None:
+        filter_clauses.append("control_family = %s")
+        filter_params.append(control_family)
+    if impact_level is not None:
+        filter_clauses.append("impact_level = %s")
+        filter_params.append(impact_level)
+
+    # tsvector match is always the leading WHERE predicate; metadata filters follow
+    tsv_clause = "to_tsvector('english', text) @@ plainto_tsquery('english', %s)"
+    where_sql = _build_where(filter_clauses, base_clause=tsv_clause)
+
+    sql = f"""
+        SELECT chunk_id, source, display_name, page, chunk_index, text
+        FROM chunks
+        {where_sql}
+        ORDER BY ts_rank(
+            to_tsvector('english', text),
+            plainto_tsquery('english', %s)
+        ) DESC
+        LIMIT %s;
+    """
+    # params order: tsv match placeholder, metadata filters, ts_rank placeholder, LIMIT
+    params = [query] + filter_params + [query, top_k]
+
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT chunk_id, source, display_name, page, chunk_index, text
-            FROM chunks
-            WHERE to_tsvector('english', text) @@ plainto_tsquery('english', %s)
-            ORDER BY ts_rank(
-                to_tsvector('english', text),
-                plainto_tsquery('english', %s)
-            ) DESC
-            LIMIT %s;
-            """,
-            (query, query, top_k),
-        )
+        cur.execute(sql, params)
         rows = cur.fetchall()
+
     return [
         {
             "chunk_id": row[0],
@@ -144,10 +216,29 @@ def reciprocal_rank_fusion(
     ]
 
 
-def hybrid_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
+def hybrid_search(
+    query: str,
+    top_k: int = TOP_K_RETRIEVAL,
+    source: str | None = None,
+    control_family: str | None = None,
+    impact_level: str | None = None,
+) -> list[dict]:
     """Hybrid retrieval: dense (pgvector) + sparse (tsvector) fused via RRF.
-    Both legs retrieve top_k independently; RRF merges and re-ranks.
-    see docs/decision_log.md DL-008"""
+
+    Both legs retrieve top_k independently; RRF merges and re-ranks the union.
+    Optional metadata pre-filters are forwarded to both legs — the same WHERE
+    clauses apply to both the HNSW sweep and the tsvector candidate set,
+    so only chunks matching the filter participate in RRF scoring.
+
+    Args:
+        query:          Natural-language query string.
+        top_k:          Maximum results to return after RRF merge.
+        source:         Restrict to a single corpus source key.
+        control_family: Restrict to a NIST 800-53 control family prefix.
+        impact_level:   Restrict to a FedRAMP impact level.
+
+    see docs/decision_log.md DL-008, DL-023
+    """
     vector = embed_query(query)
     conn = get_connection()
 
@@ -156,14 +247,22 @@ def hybrid_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
     sparse_q = _sparse_query(query)
 
     try:
-        dense = dense_search(conn, vector, top_k)
-        sparse = sparse_search(conn, sparse_q, top_k)
+        dense = dense_search(
+            conn, vector, top_k,
+            source=source, control_family=control_family, impact_level=impact_level,
+        )
+        sparse = sparse_search(
+            conn, sparse_q, top_k,
+            source=source, control_family=control_family, impact_level=impact_level,
+        )
     finally:
         conn.close()
 
     logger.info(
-        "hybrid_search: dense=%d sparse=%d sparse_query=%r original_query=%r",
+        "hybrid_search: dense=%d sparse=%d sparse_query=%r original_query=%r "
+        "| source=%s control_family=%s impact_level=%s",
         len(dense), len(sparse), sparse_q, query[:60],
+        source, control_family, impact_level,
     )
 
     results = reciprocal_rank_fusion(dense, sparse)

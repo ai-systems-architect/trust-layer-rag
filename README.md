@@ -14,7 +14,8 @@ hallucination controls, and full pipeline observability.
 | Ingestion | PDF + Word parsing, chunking | LibreOffice headless (.docx → PDF conversion) + PyMuPDF |
 | Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large |
 | Vector Store | pgvector + HNSW index | RDS PostgreSQL |
-| Retrieval | Dense + sparse fused via RRF | pgvector + tsvector |
+| Query Classification | Rule-based metadata filter inference | Regex classifier in pipeline.py |
+| Retrieval | Dense + sparse fused via RRF, metadata pre-filtered | pgvector + tsvector |
 | Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
 | Tracing | Full pipeline observability | Langfuse Cloud |
 | Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
@@ -116,7 +117,7 @@ Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 ## Pipeline
 
 ```
-query → [Input Guardrail] → Retrieval → Reranking → Generation → [Output Guardrail] → response
+query → [Input Guardrail] → [Classify] → Retrieval (pre-filtered) → Reranking → Generation → [Output Guardrail] → response
 ```
 
 Dual guardrail architecture — input gate blocks before retrieval fires, output gate
@@ -127,8 +128,18 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak
 patterns with no downstream token cost.
 
+**Classify** — Rule-based query classifier infers metadata pre-filters from the query
+text. Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4) resolve to a
+`control_family` filter; queries mentioning FedRAMP Moderate resolve to an
+`impact_level` filter. Filters are passed as SQL WHERE clauses to both retrieval legs —
+the HNSW sweep and tsvector candidate set are scoped to matching chunks only. Queries
+with no recognised signal perform a full-corpus scan (unchanged behaviour). Zero latency
+— pure regex, no external calls. See docs/decision_log.md DL-023.
+
 **Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents
-parsed, chunked, embedded, and stored in pgvector on RDS.
+parsed, chunked, embedded, and stored in pgvector on RDS. Each chunk carries
+`control_family` (NIST 800-53 family prefix, extracted from text) and `impact_level`
+(FedRAMP impact, source-derived) metadata columns for pre-filter support.
 
 **Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused
 via Reciprocal Rank Fusion. Returns top-10 chunks.
@@ -265,17 +276,6 @@ query input (before embedding), corpus ingestion (before chunking), and generate
 output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.
 Langfuse traces should be scrubbed at source to prevent PII persistence in the
 observability store. See docs/decision_log.md DL-017.
-
-**[Planned Next] Metadata filtering** — production deployment would benefit from pre-filtering chunks
-by source document, impact level, or control family before vector search. Current
-implementation searches the full corpus for every query. As corpus expands —
-agency-specific SSPs, additional NIST publications, vendor documentation — unfiltered
-search introduces noise from irrelevant documents. Implementation: add source,
-impact_level, and control_family metadata columns to the chunks table, filter via SQL
-WHERE clause before HNSW search. Pairs naturally with system profile intake — once
-the user's system impact level is known, retrieval can be scoped to the relevant
-baseline automatically. At current four-document scale, full corpus search is fast and
-filtering would reduce recall.
 
 **[Production Required] Query guardrail** — validate and sanitize query input before embedding. Block
 prompt injection attempts, extremely long inputs, and non-compliance queries. Bedrock

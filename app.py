@@ -68,10 +68,18 @@ for msg in st.session_state.messages:
 
         if msg["role"] == "assistant" and msg.get("metadata"):
             meta = msg["metadata"]
-            cols = st.columns(3)
+            filter_parts = []
+            if meta.get("filters", {}).get("control_family"):
+                filter_parts.append(meta["filters"]["control_family"])
+            if meta.get("filters", {}).get("impact_level"):
+                filter_parts.append(meta["filters"]["impact_level"])
+            filter_label = " | ".join(filter_parts) if filter_parts else "none"
+
+            cols = st.columns(4)
             cols[0].caption(f"Retriever: `{meta['retriever']}`")
-            cols[1].caption(f"Guardrail: `{meta['guardrail_action']}`")
-            cols[2].caption(f"Trace: `{meta['trace_id']}`")
+            cols[1].caption(f"Filter: `{filter_label}`")
+            cols[2].caption(f"Guardrail: `{meta['guardrail_action']}`")
+            cols[3].caption(f"Trace: `{meta['trace_id']}`")
 
 # chat input
 if query := st.chat_input("Ask a compliance question…"):
@@ -104,11 +112,21 @@ if query := st.chat_input("Ask a compliance question…"):
                 st.divider()
 
         # metadata row — trace_id is None when input guardrail blocks early
-        cols = st.columns(3)
+        # filters label shows which metadata pre-filter fired (e.g. "AC | Moderate")
+        # or "none" when the classifier found no signal and a full-corpus scan ran.
+        filter_parts = []
+        if output.get("filters", {}).get("control_family"):
+            filter_parts.append(output["filters"]["control_family"])
+        if output.get("filters", {}).get("impact_level"):
+            filter_parts.append(output["filters"]["impact_level"])
+        filter_label = " | ".join(filter_parts) if filter_parts else "none"
+
+        cols = st.columns(4)
         cols[0].caption(f"Retriever: `{output['retriever']}`")
-        cols[1].caption(f"Guardrail: `{output['guardrail_action']}`")
+        cols[1].caption(f"Filter: `{filter_label}`")
+        cols[2].caption(f"Guardrail: `{output['guardrail_action']}`")
         trace_label = output["trace_id"] if output["trace_id"] else "blocked"
-        cols[2].caption(f"Trace: `{trace_label}`")
+        cols[3].caption(f"Trace: `{trace_label}`")
 
     # save to session state
     st.session_state.messages.append({
@@ -117,6 +135,8 @@ if query := st.chat_input("Ask a compliance question…"):
         "sources": output["chunks"],
         "metadata": {
             "retriever": "hybrid" if use_hybrid else "semantic",
+            # filters persisted so replayed history renders the correct filter label
+            "filters": output.get("filters", {}),
             "guardrail_action": output["guardrail_action"],
             "trace_id": output["trace_id"],
         },

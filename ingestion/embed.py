@@ -70,7 +70,9 @@ def embed_batch(client: OpenAI, texts: list[str]) -> tuple[list[list[float]], in
 
 
 def insert_batch(conn, batch: list[dict], embeddings: list[list[float]]) -> None:
-    """Upsert chunk rows — ON CONFLICT (chunk_id) DO NOTHING skips duplicates."""
+    """Upsert chunk rows — ON CONFLICT (chunk_id) DO NOTHING skips duplicates.
+    control_family and impact_level included for metadata-aware retrieval (DL-023).
+    Both are nullable — None values insert as SQL NULL."""
     rows = [
         (
             chunk["chunk_id"],
@@ -81,6 +83,8 @@ def insert_batch(conn, batch: list[dict], embeddings: list[list[float]]) -> None
             chunk.get("page"),
             chunk.get("chunk_index"),
             chunk["text"],
+            chunk.get("control_family"),   # None → SQL NULL for non-800-53 sources
+            chunk.get("impact_level"),     # None → SQL NULL for non-FedRAMP sources
             embedding,
         )
         for chunk, embedding in zip(batch, embeddings)
@@ -90,12 +94,13 @@ def insert_batch(conn, batch: list[dict], embeddings: list[list[float]]) -> None
             cur,
             """
             INSERT INTO chunks
-                (chunk_id, source, display_name, version, date, page, chunk_index, text, embedding)
+                (chunk_id, source, display_name, version, date, page, chunk_index,
+                 text, control_family, impact_level, embedding)
             VALUES %s
             ON CONFLICT (chunk_id) DO NOTHING;
             """,
             rows,
-            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s::vector)",
+            template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)",
         )
     conn.commit()
 

@@ -43,31 +43,75 @@ def embed_query(query: str) -> list[float]:
     return response.data[0].embedding
 
 
-def semantic_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
+def semantic_search(
+    query: str,
+    top_k: int = TOP_K_RETRIEVAL,
+    source: str | None = None,
+    control_family: str | None = None,
+    impact_level: str | None = None,
+) -> list[dict]:
     """Dense retrieval via pgvector HNSW cosine similarity.
-    <=> is cosine distance — 1 - distance converts to similarity score.
-    see docs/decision_log.md DL-002, DL-008"""
+
+    Optional metadata pre-filters narrow the candidate set before the HNSW
+    sweep — callers pass None for any filter they don't need (default behaviour
+    is unchanged). Filters are AND-combined when multiple are supplied.
+
+    Args:
+        query:          Natural-language query string.
+        top_k:          Maximum results to return.
+        source:         Restrict to a single corpus source key
+                        (e.g. "nist_800_53", "fedramp_moderate_baseline").
+        control_family: Restrict to a NIST 800-53 control family prefix
+                        (e.g. "AC", "IR", "SC").
+        impact_level:   Restrict to a FedRAMP impact level
+                        (e.g. "Moderate").
+
+    Returns:
+        List of chunk dicts with keys: chunk_id, source, display_name,
+        page, chunk_index, text, score, retriever.
+
+    see docs/decision_log.md DL-002, DL-008, DL-023
+    """
     vector = embed_query(query)
     conn = get_connection()
 
+    # Build optional WHERE clauses — only include filters that were supplied.
+    # Params list mirrors %s placeholders: vector (score), filters..., vector
+    # (ORDER BY), top_k (LIMIT).
+    where_clauses: list[str] = []
+    filter_params: list = []
+
+    if source is not None:
+        where_clauses.append("source = %s")
+        filter_params.append(source)
+    if control_family is not None:
+        where_clauses.append("control_family = %s")
+        filter_params.append(control_family)
+    if impact_level is not None:
+        where_clauses.append("impact_level = %s")
+        filter_params.append(impact_level)
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    sql = f"""
+        SELECT
+            chunk_id,
+            source,
+            display_name,
+            page,
+            chunk_index,
+            text,
+            1 - (embedding <=> %s::vector) AS score
+        FROM chunks
+        {where_sql}
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s;
+    """
+    params = [vector] + filter_params + [vector, top_k]
+
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    chunk_id,
-                    source,
-                    display_name,
-                    page,
-                    chunk_index,
-                    text,
-                    1 - (embedding <=> %s::vector) AS score
-                FROM chunks
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s;
-                """,
-                (vector, vector, top_k),
-            )
+            cur.execute(sql, params)
             rows = cur.fetchall()
     finally:
         conn.close()
@@ -86,7 +130,10 @@ def semantic_search(query: str, top_k: int = TOP_K_RETRIEVAL) -> list[dict]:
         for row in rows
     ]
 
-    logger.info("semantic_search: %d results for query=%r", len(results), query[:60])
+    logger.info(
+        "semantic_search: %d results | query=%r | source=%s control_family=%s impact_level=%s",
+        len(results), query[:60], source, control_family, impact_level,
+    )
     return results
 
 

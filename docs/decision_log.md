@@ -919,6 +919,104 @@ pre-gate the Bedrock call — apply Bedrock only for ambiguous cases. For portfo
 - Query length check only — too simple, misses injection patterns
 - Custom classifier (SVM / regex) — more control, significant maintenance surface
 - Bedrock input-only guardrail (no output) — rejected: both gates needed for defense in depth
-informative column — isolates RRF fusion contribution independently of Cohere reranking.
-If MRR jumps at Hybrid, BM25 fusion drives rank quality. If MRR jumps at Hybrid+Rerank,
-Cohere is the primary ranking layer. Both are valid with different cost optimization implications.
+
+---
+
+## DL-023 — Metadata-Aware Retrieval
+**Date:** 2026-04-15
+
+**Decision:** Add `control_family` and `impact_level` metadata columns to the
+`chunks` table. Infer filters from query text via a rule-based classifier in
+`pipeline.py`. Pass filters as SQL WHERE clauses to both retrieval legs before
+HNSW sweep and tsvector candidate set generation.
+
+**Rationale:** Full-corpus search is correct at current scale (~1,700 chunks,
+four documents). As corpus grows — agency SSPs, additional NIST publications,
+vendor documentation — unfiltered retrieval introduces cross-document noise. A
+query about FedRAMP Moderate access controls should not compete against AI RMF
+governance chunks for rank slots in the top-10 candidates passed to Cohere.
+
+Metadata pre-filtering solves this with no retrieval architecture change — a SQL
+WHERE clause on indexed columns eliminates irrelevant documents before the HNSW
+sweep begins. The filter is query-derived, not user-configured, so the UI stays
+simple.
+
+**Schema changes:**
+```sql
+control_family TEXT   -- NIST 800-53 family prefix: AC, AU, CM, IR, SC, SI, RA, SA, …
+                      -- Extracted from chunk text at ingest. NULL for non-800-53 sources.
+impact_level   TEXT   -- FedRAMP impact level: Moderate (only baseline in current corpus).
+                      -- NULL for non-FedRAMP sources. Source-derived, not text-extracted.
+```
+Both columns are nullable — metadata is source-specific, never fabricated.
+Adding non-nullable columns to an existing table requires DROP + recreate, which
+motivated `run_fresh_setup()` and the `--fresh` CLI flag in `db/setup.py`.
+
+**`control_family` extraction — `ingestion/chunk.py`:**
+Regex `\b([A-Z]{2,4})-\d+` extracts control ID prefixes from each chunk's text.
+Matches are filtered against `_VALID_800_53_FAMILIES` — a whitelist of the 20
+recognised 800-53 family prefixes. The most frequent valid prefix per chunk is
+the dominant family (via `Counter.most_common`).
+
+Why the whitelist is required: NIST AI RMF uses subcategory IDs such as MAP-1.1
+and GOVERN-2.2. These match the control ID regex pattern but are not 800-53
+families. Without the whitelist, AI RMF chunks would be labelled `control_family
+= "MAP"` or `"GOVERN"` — meaningless for 800-53 pre-filtering and incorrect for
+cross-corpus queries.
+
+`_VALID_800_53_FAMILIES = {"AC","AT","AU","CA","CM","CP","IA","IR","MA","MP",
+"PE","PL","PM","PS","PT","RA","SA","SC","SI","SR"}`
+
+**`impact_level` extraction — `ingestion/chunk.py`:**
+Impact level is source-derived, not text-extracted. `_FEDRAMP_IMPACT` dict maps
+source key to level: `{"fedramp_moderate_baseline": "Moderate"}`. All FedRAMP
+chunks receive `impact_level = "Moderate"`; all other sources receive `NULL`.
+Text-based extraction was rejected — the Moderate Baseline document does not
+consistently self-label "Moderate" in body text, and extracting it from text
+would produce inconsistent coverage across chunks.
+
+**Rule-based query classifier — `pipeline.py`:**
+`classify_query(query)` inspects the scrubbed query for:
+1. NIST 800-53 control IDs — extracts the first valid family prefix
+   (`_CONTROL_ID_RE = r'\b([A-Z]{2,4})-\d+'`, filtered by `_VALID_800_53_FAMILIES`)
+2. FedRAMP Moderate keywords — `r'\b(fedramp\s+moderate|moderate\s+baseline)\b'`
+
+Returns a `filters` dict passed as `**kwargs` to `semantic_search()` /
+`hybrid_search()`. Empty dict → full-corpus scan (unchanged behaviour).
+Filters are logged on the Langfuse trace input and surfaced in the `app.py`
+metadata caption row (`Filter: AC` / `Filter: Moderate` / `Filter: none`).
+
+**Why rule-based over ML classifier:**
+Compliance queries are structured — control IDs and framework keywords are
+explicit, high-confidence signals. A deterministic regex adds zero latency,
+is fully auditable, and has no training data requirement. An ML intent
+classifier would add complexity (training pipeline, model hosting, latency)
+without meaningful precision gain at this query volume. If corpus grows to
+include many overlapping frameworks where intent is ambiguous, revisit.
+
+**Database indexes added:**
+- `chunks_source_idx` — B-tree on `source` column. B-tree is appropriate for
+  low-cardinality equality filters (4 distinct values). Supports `WHERE source = %s`
+  pre-filter for source-scoped retrieval.
+- `control_family` and `impact_level` are not separately indexed at current
+  scale — query planner will use sequential scan on filtered subsets. Add
+  B-tree indexes if corpus grows beyond ~50K chunks or filter queries show
+  high explain-plan costs.
+
+**Re-ingestion requirement:**
+Schema changes require `python db/setup.py --fresh` (drop + recreate) followed
+by full re-ingestion. `run_fresh_setup()` automates the sequence. The `--fresh`
+flag documents intent explicitly — an accidental `python db/setup.py` call
+(no flag) runs safe idempotent setup only, never drops data.
+
+**Current filter coverage (post-ingestion):**
+- NIST 800-53 chunks — `control_family` populated for chunks containing control IDs;
+  NULL for introductory and appendix sections with no explicit control citations.
+- FedRAMP chunks — `impact_level = "Moderate"` on all 442 chunks.
+- AI RMF, AI 600-1 chunks — both columns NULL; full-corpus scan always applies.
+
+**Production extension path:**
+- Add FedRAMP Low and High baselines → extend `_FEDRAMP_IMPACT` dict
+- Add agency SSPs → add `agency` metadata column, extend classifier
+- Add system profile intake (future work) → user-supplied impact level and
+  control families override classifier output, enabling scoped retrieval per session
