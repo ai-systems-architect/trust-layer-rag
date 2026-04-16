@@ -1237,7 +1237,7 @@ documented. Items completed since initial RAGAs evaluation (DL-020):
 | Item 17 | Matryoshka benchmark — dimension delta analysis documented | DL-018 update |
 
 Deferred items (evaluated and deprioritized — see README Future Work):
-- **FedRAMP PII allowlist** — Presidio en_core_web_lg misclassifies "FedRAMP" as PERSON; fix is an allowlist in `utils/pii_filter.py`; not implemented
+- **Presidio domain term allowlist** — Presidio en_core_web_lg misclassifies "FedRAMP" as PERSON; broader fix covers NIST, AWS, Bedrock acronyms; not implemented (see DL-027 for BM25+metadata interaction found during worked examples)
 - **System profile intake** — conditions retrieval on user system impact level; deferred until P4 agent architecture
 - **Control checklist generation** — second LLM call for structured output; deferred; adds cost per query
 - **Long-term session memory** — cross-session persistence in RDS; deferred; P4 agent has this from day one
@@ -1245,3 +1245,26 @@ Deferred items (evaluated and deprioritized — see README Future Work):
 
 Evaluation methodology documented in `docs/evaluation_methodology.md`.
 P2 is closed. P4 (compliance-triage-agent) is the next portfolio project.
+
+---
+
+## DL-027 — BM25 + Metadata Filter Interaction
+**Date:** 2026-04-15
+
+**Decision:** Accept dense-only fallback when tsvector sparse retrieval collapses under a combined metadata pre-filter. Production fix documented but not implemented at current corpus scale.
+
+**Observed behavior:**
+AC-6 query with `control_family=AC` filter. The metadata filter reduced the corpus from 1,696 to 424 AC-family chunks before retrieval. The combined `WHERE tsvector_match AND control_family='AC'` SQL condition caused BM25 to return zero candidates — the tsvector index does not span the metadata column, forcing PostgreSQL to perform a sequential scan on the filtered 424-chunk subset where no rows satisfy both the tsvector match and the column condition simultaneously.
+
+Result: `BM25 fired=False` despite AC-6 being correctly preserved in the sparse query by regex pre-extraction (DL-019). Dense retrieval surfaced the correct chunks; Cohere reranked the FedRAMP AC-6 implementation chunk to rank 1 (score 0.9891). Dense-only fallback is acceptable behavior.
+
+**Root cause:**
+PostgreSQL tsvector GIN index is a corpus-wide index. When a metadata column filter (`control_family='AC'`) is applied as a WHERE clause, the query planner must evaluate both conditions — but the GIN index cannot be combined with the btree metadata column filter in a single index scan. At 424 rows the planner opts for a sequential scan, and the BM25 threshold returns no matches above the minimum score.
+
+**Production fix (not implemented):**
+Run dense and sparse retrieval as separate queries. Apply the metadata filter only to the dense (pgvector) leg — `SELECT ... ORDER BY embedding <=> $1 WHERE control_family = $2`. Run sparse leg against the full corpus with no metadata filter. Fuse both ranked lists via RRF post-retrieval. This preserves BM25 signal while still concentrating dense retrieval on the relevant control family.
+
+**Why not implemented now:**
+At 1,696 chunks and with dense-only fallback producing correct top-1 results (FedRAMP chunk, Cohere score 0.9891), the quality impact is negligible. The fix adds retrieval complexity — two independent query paths instead of one — that is not warranted at this corpus scale.
+
+**Related:** DL-023 (metadata-aware retrieval), DL-019 (BM25 sparse preprocessing), DL-008 (hybrid retrieval architecture)

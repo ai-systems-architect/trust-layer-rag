@@ -229,7 +229,8 @@ cases follow. All traces visible in Langfuse Cloud.
 |-------|-------|
 | Filters | `control_family=AC` |
 | BM25 fired | No — see Findings below |
-| Post-RRF candidates | 7 of 7 passed (all ≥ 0.0150) |
+| Corpus searched | 424 of 1,696 chunks (control_family=AC filter — 75% reduction) |
+| Post-RRF candidates | 7 of 10 passed gate (≥ 0.0150); 3 filtered |
 | Query enriched | No |
 | Guardrail (input/output) | NONE / none |
 | Trace ID | `a7b0410a-67c6-4798-b9dd-43d80b8338b1` |
@@ -289,7 +290,7 @@ Baseline page 44.
 |-------|-------|
 | Filters | none |
 | BM25 fired | Yes — ranks 1 and 2 (scores 0.0325, 0.0308) |
-| Post-RRF candidates | 9 of 9 passed |
+| Post-RRF candidates | 9 of 10 passed gate; 1 filtered |
 | Query enriched | No |
 | Guardrail (input/output) | NONE / none |
 | Trace ID | `1c2f4226-63ef-46e2-94b6-7b8fe6f5dcad` |
@@ -384,7 +385,7 @@ All three refusals are driven by corpus grounding, not the Bedrock output guardr
 Four architectural behaviors observed during the worked examples run that were not apparent from evaluation metrics alone:
 
 **1. BM25 + metadata filter collapse (MAIN-1)**
-The `control_family=AC` SQL pre-filter reduces the BM25 candidate pool to AC-family chunks only. At 1,112 NIST 800-53 chunks this is a large sub-corpus, but the combined `WHERE tsvector_match AND control_family='AC'` condition causes tsvector to return zero rows — the matching chunks do not satisfy both conditions simultaneously at the term level. BM25 fired=False despite AC-6 being present in the query. Dense retrieval covered the gap correctly; Cohere ranked the FedRAMP AC-6 implementation chunk first (0.9891). Documented in DL-023 as an architectural finding specific to combined metadata+sparse filtering on small corpora.
+The `control_family=AC` SQL pre-filter reduces the corpus from 1,696 to 424 chunks before retrieval. The combined `WHERE tsvector_match AND control_family='AC'` condition causes tsvector to return zero rows on this filtered subset — BM25 fired=False despite AC-6 being present in the query. Dense retrieval covered the gap; Cohere ranked the FedRAMP AC-6 implementation chunk first (0.9891). Production fix: run sparse and dense legs separately, apply metadata filter to dense leg only, fuse post-filter. Documented in DL-027.
 
 **2. BM25 fires on short governance queries (MAIN-2)**
 The evaluation dataset showed BM25 fired on control ID queries (NIST 800-53, FedRAMP) and not on governance queries (AI RMF, AI 600-1). MAIN-2 contradicts the second half of that observation: the 9-word governance query fired BM25 at 0.0325/0.0308. Root cause: short queries preserve "govern" as a distinctive BM25 token after stop-word stripping. Evaluation questions were 10–15 words — "govern" was one of many terms and did not anchor alone. Short Streamlit queries behave differently from long evaluation questions. Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category.
@@ -520,10 +521,11 @@ model, stop_reason, and guardrail_action before returning to pipeline.
 control IDs (AC-2, IR-4) before the 5-term BM25 limit ensures identifiers are always
 preserved as high-value anchors. See docs/decision_log.md DL-019.
 
-**[Planned Next] FedRAMP PII allowlist** — Presidio `en_core_web_lg` misclassifies "FedRAMP"
-as a PERSON entity, scrubbing the token from cross-corpus queries before embedding. Fix:
-add an allowlist entry in `utils/pii_filter.py` using Presidio's `NLP_ARTIFACTS` deny-list
-override. Observed during worked examples run on MAIN-3 cross-corpus synthesis query.
+**[Planned Next] Presidio domain term allowlist** — Presidio `en_core_web_lg` misclassifies
+federal program acronyms (FedRAMP, NIST, AWS, Bedrock) as named entities, scrubbing them
+from queries before embedding. Observed on MAIN-3 cross-corpus synthesis query — "FedRAMP"
+classified as PERSON, FedRAMP corpus not retrieved, answer garbled. Fix: add domain-specific
+acronyms to Presidio recognizer allowlist in `utils/pii_filter.py`. See DL-027.
 
 **[Stretch] Structured intent extraction** — classify query intent (control lookup, gap
 assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
