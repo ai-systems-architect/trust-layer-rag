@@ -1,10 +1,12 @@
 import logging
 import re
+from typing import Optional
 
 from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
 from retrieval.semantic import semantic_search
 from retrieval.hybrid import hybrid_search
 from retrieval.rerank import rerank
+from retrieval.query_enrichment import enrich_query
 from generation.generate import generate, check_guardrail
 from tracing.tracer import get_langfuse
 from utils.pii_filter import scrub
@@ -81,14 +83,29 @@ def classify_query(query: str) -> dict:
     return filters
 
 
-def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
+def run_pipeline(
+    query: str,
+    use_hybrid: bool = True,
+    history: Optional[list] = None,
+) -> dict:
     """End-to-end compliance query pipeline with Langfuse tracing.
-    input guardrail → classify → retrieve (with metadata pre-filter) → rerank → generate
+
+    Pipeline order:
+      PII scrub → input guardrail → query enrichment → classify →
+      retrieve (pre-filtered) → rerank → generate → output guardrail
+
     Each stage traced as a child span. Input guardrail short-circuits before
     retrieval fires — blocked queries return immediately with no downstream cost.
-    use_hybrid=True (default); set False for semantic-only baseline (RAGAs Step 8).
-    see docs/decision_log.md DL-008, DL-006, DL-022, DL-023"""
 
+    Args:
+        query:      Raw user query string.
+        use_hybrid: True (default) = dense + sparse + RRF. False = semantic only.
+        history:    Prior conversation messages from Streamlit session state.
+                    Used by query enrichment to resolve pronouns and ambiguous
+                    references before the embedding call. None = first turn.
+
+    see docs/decision_log.md DL-008, DL-006, DL-022, DL-023, DL-025
+    """
     # --- PII scrub ---
     # Scrub query before any external service call (OpenAI embedding, Cohere rerank,
     # Bedrock). Original query retained for user-facing display only.
@@ -105,6 +122,7 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
         logger.info("run_pipeline: query blocked by input guardrail")
         return {
             "query": query,
+            "enriched_query": query_clean,
             "retriever": "blocked",
             "chunks": [],
             "answer": (
@@ -117,21 +135,38 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
             "trace_id": None,
         }
 
+    # --- query enrichment (retrieval-side conversational memory) ---
+    # Resolves pronouns and ambiguous references using recent conversation turns
+    # before the embedding call. "How does that relate to least privilege?" becomes
+    # "How does AC-6 relate to least privilege in NIST 800-53?" — the retriever
+    # embeds a fully specified query rather than an unresolved pronoun.
+    #
+    # Enrichment is bypassed on: first turn (no history), long queries (8+ words),
+    # queries with no ambiguous pronouns. All three bypass conditions are O(1).
+    # Enrichment failure never blocks the pipeline — falls back to query_clean.
+    #
+    # classify_query runs on the enriched query so metadata filters benefit
+    # from the resolved content (e.g. "that" → "AC-6" triggers control_family=AC).
+    # see docs/decision_log.md DL-025
+    enriched_query = enrich_query(query_clean, history)
+    query_was_enriched = enriched_query != query_clean
+
     # --- metadata filter classification ---
-    # Rule-based classifier runs on the scrubbed query — infers control_family
-    # and/or impact_level from control IDs and FedRAMP keywords in the query.
-    # Filters are passed to retrieval as SQL WHERE clauses; queries with no
-    # recognisable signals get a full-corpus scan (filters={}, unchanged behaviour).
+    # Run on enriched query — resolved control IDs and FedRAMP keywords are
+    # more reliable classification signals than unresolved pronouns.
     # see docs/decision_log.md DL-023
-    filters = classify_query(query_clean)
+    filters = classify_query(enriched_query)
 
     lf = get_langfuse()
     trace = lf.trace(
         name="compliance-query",
-        # query_clean in trace — scrubbed version logged to Langfuse Cloud
-        # filters logged so per-query pre-filter decisions are visible in dashboard
+        # both original and enriched query in trace — Langfuse shows the rewrite
+        # quality for every request; "that" → "AC-6" visible in trace input
         input={
-            "query": query_clean,
+            "original_query": query_clean,
+            "enriched_query": enriched_query,
+            "query_enriched": query_was_enriched,
+            "history_turns_used": len((history or [])[-6:]) // 2,
             "retriever": "hybrid" if use_hybrid else "semantic",
             "filters": filters,
         },
@@ -139,22 +174,28 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
 
     try:
         # --- retrieve ---
-        span = trace.span(name="retrieve", input={"query": query_clean, "use_hybrid": use_hybrid,
-                                                   "filters": filters})
+        span = trace.span(name="retrieve", input={
+            "enriched_query": enriched_query,
+            "use_hybrid": use_hybrid,
+            "filters": filters,
+        })
         if use_hybrid:
-            chunks = hybrid_search(query_clean, top_k=TOP_K_RETRIEVAL, **filters)
+            chunks = hybrid_search(enriched_query, top_k=TOP_K_RETRIEVAL, **filters)
         else:
-            chunks = semantic_search(query_clean, top_k=TOP_K_RETRIEVAL, **filters)
+            chunks = semantic_search(enriched_query, top_k=TOP_K_RETRIEVAL, **filters)
         span.end(output={"chunk_count": len(chunks)})
 
         # --- rerank ---
+        # Enriched query passed to Cohere — cross-encoder scores against resolved
+        # query produce better precision than scoring against an ambiguous pronoun.
         span = trace.span(name="rerank", input={"chunk_count": len(chunks)})
-        reranked = rerank(query_clean, chunks, top_k=TOP_K_RERANK)
+        reranked = rerank(enriched_query, chunks, top_k=TOP_K_RERANK)
         span.end(output={"chunk_count": len(reranked)})
 
         # --- generate ---
+        # Enriched query passed to generation — prompt reflects the resolved intent.
         span = trace.span(name="generate", input={"chunk_count": len(reranked)})
-        result = generate(query_clean, reranked)
+        result = generate(enriched_query, reranked)
         span.end(output={
             "answer_preview": result["answer"][:200],
             "guardrail_action": result["guardrail_action"],
@@ -167,10 +208,13 @@ def run_pipeline(query: str, use_hybrid: bool = True) -> dict:
 
     return {
         "query": query,
+        # enriched_query surfaced in app.py — shown to user when rewrite fired
+        # so they can see that "that" was resolved to "AC-6" before retrieval
+        "enriched_query": enriched_query,
+        "query_was_enriched": query_was_enriched,
         "retriever": "hybrid" if use_hybrid else "semantic",
-        # filters dict — control_family / impact_level inferred by classify_query.
-        # Empty dict when no signal found (full-corpus retrieval). Surfaced in
-        # app.py caption and Langfuse trace input for auditability.
+        # filters derived from enriched query — may capture control IDs that
+        # were absent from the raw pronoun query
         "filters": filters,
         "chunks": reranked,
         "answer": result["answer"],

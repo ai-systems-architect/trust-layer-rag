@@ -84,21 +84,31 @@ for msg in st.session_state.messages:
 # chat input
 if query := st.chat_input("Ask a compliance question…"):
 
+    # Capture history BEFORE appending current message — enrich_query needs
+    # prior turns as context, not the current question being asked.
+    history_before = list(st.session_state.messages)
+
     # render user message
     with st.chat_message("user"):
         st.markdown(query)
     st.session_state.messages.append({"role": "user", "content": query})
 
-    # run pipeline
+    # run pipeline with prior history for query enrichment
     with st.chat_message("assistant"):
         with st.spinner("Retrieving · Reranking · Generating…"):
             try:
-                output = run_pipeline(query, use_hybrid=use_hybrid)
+                output = run_pipeline(query, use_hybrid=use_hybrid, history=history_before)
             except Exception as e:
                 st.error(f"Pipeline error: {e}")
                 st.stop()
 
         st.markdown(output["answer"])
+
+        # enriched query label — shown only when the rewrite actually fired.
+        # This is the key demo moment: user sees "that" resolved to "AC-6"
+        # before retrieval, confirming conversational context is working.
+        if output.get("query_was_enriched"):
+            st.caption(f"💬 Query resolved to: *{output['enriched_query']}*")
 
         # sources expander
         with st.expander(f"📄 Sources ({len(output['chunks'])} chunks)"):
@@ -135,9 +145,11 @@ if query := st.chat_input("Ask a compliance question…"):
         "sources": output["chunks"],
         "metadata": {
             "retriever": "hybrid" if use_hybrid else "semantic",
-            # filters persisted so replayed history renders the correct filter label
             "filters": output.get("filters", {}),
             "guardrail_action": output["guardrail_action"],
             "trace_id": output["trace_id"],
+            # enrichment fields persisted for history replay and debugging
+            "enriched_query": output.get("enriched_query", ""),
+            "query_was_enriched": output.get("query_was_enriched", False),
         },
     })

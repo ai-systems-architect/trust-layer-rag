@@ -118,7 +118,7 @@ Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 ## Pipeline
 
 ```
-query → [Input Guardrail] → [Classify] → Retrieval (pre-filtered) → Reranking → Generation → [Output Guardrail] → response
+query → [Input Guardrail] → [Enrich] → [Classify] → Retrieval (pre-filtered) → Reranking → Generation → [Output Guardrail] → response
 ```
 
 Dual guardrail architecture — input gate blocks before retrieval fires, output gate
@@ -129,13 +129,19 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak
 patterns with no downstream token cost.
 
-**Classify** — Rule-based query classifier infers metadata pre-filters from the query
-text. Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4) resolve to a
-`control_family` filter; queries mentioning FedRAMP Moderate resolve to an
-`impact_level` filter. Filters are passed as SQL WHERE clauses to both retrieval legs —
-the HNSW sweep and tsvector candidate set are scoped to matching chunks only. Queries
-with no recognised signal perform a full-corpus scan (unchanged behaviour). Zero latency
-— pure regex, no external calls. See docs/decision_log.md DL-023.
+**Query Enrichment** — Resolves pronouns and ambiguous references in follow-up queries
+using recent conversation context before the embedding call. "How does that relate to
+least privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?"
+— the retriever embeds a fully specified query. Claude via Bedrock at `temperature=0.0`
+rewrites the query deterministically. Bypassed on first turn, long queries (8+ words),
+and queries with no ambiguous pronouns — adds ~150ms only on triggered queries.
+Rewrite visible in app UI and Langfuse trace. See docs/decision_log.md DL-025.
+
+**Classify** — Rule-based query classifier infers metadata pre-filters from the
+enriched query text. Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4)
+resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to
+an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger
+the filter even when the original query used a pronoun. See docs/decision_log.md DL-023.
 
 **Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents
 parsed, chunked, embedded, and stored in pgvector on RDS. Each chunk carries
@@ -260,27 +266,18 @@ specific to a target system rather than general corpus lookup.
 **[Stretch] Control checklist generation** — second LLM call post-retrieval to structure
 answers as actionable, system-specific control checklists rather than prose summaries.
 
-**[Planned Next] Conversational memory** — short-term session context is implemented in Streamlit:
-conversation history (concatenated prior Q+A turns) is passed to Claude at generation
-time, so answers are contextually aware within a session.
-
-What is not implemented: conversation history does not influence the retrieval query.
-Each query hits pgvector as a standalone question regardless of prior turns. A user
-who asked about AC-6 then asks "what about logging requirements" — the retriever
-searches only on the second question, not the enriched context. Retrieval-side memory
-would inject recent turns into the query before embedding, surfacing chunks relevant
-to the full conversation thread rather than the isolated question.
+**[Implemented] Conversational memory (retrieval-side)** — follow-up queries are
+rewritten using recent conversation context before the embedding call. Pronouns and
+vague references ("that", "it", "this approach") are resolved to their specific
+referents so the retriever embeds a fully specified query. Claude at `temperature=0.0`
+handles the rewrite deterministically; bypassed on first turn and self-contained
+queries. See docs/decision_log.md DL-025.
 
 Long-term memory across sessions — persisting user system profile (impact level,
 deployment model, control families reviewed) in RDS keyed by user ID — is not
 implemented. Would enable the system to answer "given your Moderate-impact SaaS
 system, here are the AC controls you still need to address" rather than answering
-generically on every session.
-
-Implementation patterns: query enrichment with recent turns for short-term retrieval
-memory, vector memory (embed prior interactions, retrieve relevant past context
-alongside corpus chunks) for long-term. Pairs with system profile intake future work
-item.
+generically on every session. Pairs with system profile intake future work item.
 
 **[Production Required] PII filtering** — production deployment requires PII detection and redaction at
 query input (before embedding), corpus ingestion (before chunking), and generated

@@ -1087,3 +1087,100 @@ Visible in application logs for every request — observable without Langfuse.
 
 **Files changed:** `config.py` (MIN_RRF_SCORE, MIN_RRF_CANDIDATES), `retrieval/hybrid.py`
 (filter logic with safety floor after `reciprocal_rank_fusion()`)
+
+---
+
+## DL-025 — Retrieval-Side Conversational Memory (Query Enrichment)
+**Date:** 2026-04-15
+
+**Decision:** Rewrite ambiguous follow-up queries using recent conversation context
+before the embedding call, using Claude via Bedrock at `temperature=0.0`.
+Implemented in `retrieval/query_enrichment.py`, called in `pipeline.py` after the
+input guardrail and before `classify_query()` and retrieval.
+
+**The problem:**
+Conversation history was already passed to Claude at generation time — answers were
+contextually aware. But each retrieval query hit pgvector as a standalone question.
+A user who asked "What does AC-6 require?" then followed with "How does that relate
+to least privilege?" caused the retriever to embed "How does that relate to least
+privilege?" — a query with no semantic content for "that." The retriever returned
+generic least-privilege chunks rather than AC-6-specific ones.
+
+**Concrete example:**
+```
+Turn 1 retrieval: "What does AC-6 require?"                         ✅
+Turn 2 retrieval: "How does that relate to least privilege?"         ❌  "that" unresolved
+Turn 2 enriched:  "How does AC-6 relate to least privilege in NIST 800-53?"  ✅
+```
+
+**Implementation — Option A (LLM rewrite) over Option B (keyword injection):**
+
+| Approach | Mechanism | Handles | Limitations |
+|---|---|---|---|
+| Option A — LLM rewrite (selected) | Claude at temp=0.0 rewrites query | Pronouns, ellipsis, implicit references, any natural language ambiguity | ~100–200ms added latency on triggered queries |
+| Option B — keyword injection | Regex extracts control IDs from last turn, appends to query | Control ID references only | Brittle — misses "it", "this approach", "the framework" patterns |
+
+Option A was selected: compliance follow-ups use varied reference patterns ("that requirement",
+"this control", "the framework above") that keyword injection misses. Claude at temperature
+0.0 handles all these deterministically. The latency cost (~150ms) fires only on triggered
+queries — most first-turn and self-contained queries bypass the call entirely.
+
+**Bypass conditions (fast path — no Bedrock call):**
+Three O(1) checks gate the enrichment call:
+1. No history — first conversation turn, nothing to resolve against
+2. Query is 8+ words — long queries are typically self-contained
+3. No ambiguous pronouns — query contains none of: `that, it, this, these, those, they, them`
+
+All five test cases for the bypass logic pass:
+- Pronoun + history → enrichment fires
+- Pronoun + no history → bypass (first turn)
+- Long self-contained query → bypass (8+ words)
+- Short query, no pronoun ("What about AU-12?") → bypass (no ambiguity signal)
+- Pronoun "it" + history → enrichment fires
+
+**Pipeline order after this change:**
+```
+query → PII scrub → Input Guardrail → Query Enrichment → Classify →
+Retrieve (pre-filtered) → Rerank → Generate → Output Guardrail → response
+```
+
+`classify_query()` runs on the enriched query, not the raw one — if "that" resolves
+to "AC-6", the control family classifier fires on the enriched version and sets
+`control_family = "AC"` for the SQL pre-filter. This means retrieval-side metadata
+filtering also benefits from the resolved query.
+
+**Langfuse trace observability:**
+Both original and enriched query logged on the trace root input:
+```python
+input={
+    "original_query": query_clean,
+    "enriched_query": enriched_query,
+    "query_enriched": True/False,
+    "history_turns_used": N,
+    ...
+}
+```
+The single most convincing demo: a Langfuse trace showing `original_query:
+"How does that work?"` → `enriched_query: "How does AC-6 least privilege work
+in NIST 800-53?"`. The rewrite quality is directly observable.
+
+**UI label:**
+When enrichment fires, `app.py` renders:
+`💬 Query resolved to: "How does AC-6 relate to least privilege?"`
+The user sees exactly what the retriever searched — confirming context was carried
+through.
+
+**Failure handling:**
+All exceptions in `enrich_query()` are caught — Bedrock unavailable, quota exceeded,
+unexpected response format. All fall back to the original scrubbed query.
+Enrichment is best-effort and never blocks the pipeline.
+
+**Sanity guard on rewrite:**
+Rewrite longer than 5x the original query or empty is rejected (falls back to original).
+Guards against the LLM ignoring the "output only the rewritten query" instruction and
+returning an explanation.
+
+**Future extension:**
+- Increase `_MAX_HISTORY_MESSAGES` if longer conversations show degraded resolution
+- Extend `_AMBIGUOUS_PRONOUNS` if new reference patterns are observed in Langfuse traces
+- Add `_MAX_HISTORY_MESSAGES` to `config.py` as a tunable parameter if tuning need arises
