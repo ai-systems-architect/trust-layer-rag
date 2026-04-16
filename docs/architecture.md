@@ -19,12 +19,14 @@ end-to-end in Langfuse Cloud.
 
 ## Pipeline
 
+### Ingestion (one-time)
+
 ```
 NIST 800-53 / AI RMF / AI 600-1 (PDF) + FedRAMP Moderate (.docx → PDF)
         │
         ▼
    Document Ingestion
-   (PyMuPDF extraction + tiktoken chunking)
+   (PyMuPDF extraction + tiktoken chunking — 600 tokens / 100 overlap)
    [production: AWS Batch job — see DL-016]
         │
         ▼
@@ -33,25 +35,56 @@ NIST 800-53 / AI RMF / AI 600-1 (PDF) + FedRAMP Moderate (.docx → PDF)
         │
         ▼
    pgvector on RDS
-   (HNSW index — cosine similarity)
-        │
-   ┌────┴────┐
-   │         │
-Dense       Sparse
-(pgvector)  (tsvector / BM25)
-   │         │
-   └────┬────┘
-        │  RRF fusion (top-10)
-        ▼
-   Cohere Rerank (top-5)
+   (HNSW cosine index + GIN tsvector index)
+```
+
+### Query pipeline (per request)
+
+```
+User Query
         │
         ▼
-   Generation
-   (Claude Sonnet 4.5 via Bedrock + Bedrock Guardrails)
+   PII Scrub — Presidio (query input)
         │
         ▼
-   Langfuse Tracing
-   (span-level: retrieval → rerank → generation)
+   Input Guardrail — Bedrock Guardrails
+   (prompt injection, off-topic queries — blocked → early return, no retrieval cost)
+        │
+        ▼
+   Query Enrichment — Bedrock Claude temp=0.0  (DL-025)
+   (pronoun resolution: "that" → "AC-6"; bypass on first turn / 8+ words / no pronouns)
+        │
+        ▼
+   Classify Query — rule-based  (DL-023)
+   (infer control_family + impact_level metadata pre-filters from query text)
+        │
+        ▼
+   Metadata-Filtered Hybrid Retrieval
+   ┌──────────────┬──────────────┐
+   Dense           Sparse
+   (pgvector HNSW) (tsvector / BM25)
+   └──────────────┴──────────────┘
+        │  RRF fusion — top-10  (DL-008)
+        ▼
+   Post-RRF Quality Gate  (DL-024)
+   (MIN_RRF_SCORE=0.0150 — drops weak candidates; safety floor: 3 candidates)
+        │
+        ▼
+   Cohere Rerank — cross-encoder, top-10 → top-5  (DL-005)
+        │
+        ▼
+   Claude Sonnet 4.5 via Bedrock — citation-enforced generation  (DL-004)
+        │
+        ▼
+   Output Guardrail — Bedrock Guardrails
+   (overclaiming, hallucination controls)
+        │
+        ▼
+   PII Scrub — Presidio (generated output)  (DL-017)
+        │
+        ▼
+   Response ──► Langfuse Trace
+                (span-level: retrieve → rerank → generate)
 ```
 
 ---
@@ -66,7 +99,7 @@ Dense       Sparse
 | Retrieval | pgvector (dense) + tsvector (sparse) + RRF | Hybrid fusion — exact citations + semantic queries |
 | Re-ranking | Cohere rerank-english-v3.0 | Cross-encoder precision over top-10 candidates |
 | Generation | Claude Sonnet 4.5 via Amazon Bedrock | Citation-enforced regulatory responses |
-| Guardrails | Amazon Bedrock Guardrails | PII filtering + hallucination controls |
+| Guardrails | Amazon Bedrock Guardrails | Dual gates — input (prompt injection, off-topic queries before retrieval fires) + output (overclaiming, hallucination controls) |
 | Tracing | Langfuse Cloud (us.cloud.langfuse.com) | End-to-end pipeline observability |
 | Evaluation | RAGAs | Faithfulness + retrieval precision scoring |
 | Frontend | Streamlit | Chat UI + debug sidebar |
@@ -269,10 +302,10 @@ these queries. Dense retrieval handles abstract governance language well
 through embedding space similarity. The use_hybrid flag allows per-query
 tuning in production; current default is hybrid-on for all queries.
 
-**Conversational memory boundary:** Streamlit passes concatenated prior Q+A turns to
-Claude at generation time — answers are contextually aware within a session.
-Conversation history does not condition the retrieval query — each query hits pgvector
-as a standalone question regardless of prior turns. See Future Work in README.
+**Conversational memory boundary:** Within-session pronoun enrichment implemented —
+`enrich_query()` rewrites ambiguous follow-up queries via Bedrock Claude at
+temperature=0.0 before retrieval fires (DL-025). Cross-session persistence is the
+remaining gap — see Future Work in README.
 
 ---
 

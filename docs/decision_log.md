@@ -582,7 +582,7 @@ a raw Batch job definition.
 ---
 
 ## DL-017 — PII Filtering
-**Date:** 2026-04-03 (initial) / 2026-04-14 (implemented)
+**Date:** 2026-04-03 (initial) / 2026-04-14 (implemented) / 2026-04-16 (domain allowlist added)
 
 **Decision:** Presidio-based PII filtering implemented at query input and generated
 output. Corpus ingestion hook documented but not applied — federal compliance
@@ -620,6 +620,30 @@ Scrub runs before guardrail so Bedrock trace logs also receive clean content.
 IP_ADDRESS, US_DRIVER_LICENSE, US_PASSPORT, IBAN_CODE, US_BANK_NUMBER, MEDICAL_LICENSE.
 LOCATION and DATE_TIME excluded — compliance queries legitimately reference AWS regions
 and FedRAMP authorization dates.
+
+**Domain allowlist (added 2026-04-16, expanded 2026-04-16):** en_core_web_lg NER
+misclassifies domain-specific acronyms as PERSON entities — most notably "FedRAMP"
+(observed on MAIN-3 cross-corpus query during worked examples). Fix: `_DOMAIN_ALLOWLIST`
+in `utils/pii_filter.py` drops any analyzer result whose matched span is exactly one of
+the allowlisted terms. Filtering is done after `_analyzer.analyze()` and before
+anonymization — matched spans are excluded from the result set and original text passes
+through unchanged. Resolves MAIN-3 false positive.
+
+Note: a `PatternRecognizer` deny_list would detect these as `FEDERAL_TERM` but would not
+prevent NER from also classifying the same spans as `PERSON` — post-processing on the
+result set is the correct mechanism.
+
+Full allowlist: FedRAMP, FISMA, ATO, RMF, OSCAL, NIST, MITRE, ATT&CK, AWS, Bedrock,
+IAM, FIPS, SIEM, ISSO, ISSM, CISO, SSP, POA&M, CONOPS, SOC.
+
+**Control ID false positive (fixed 2026-04-16):** SpacyNER (score 0.85) classifies
+NIST control identifiers with single-digit enhancements as PERSON entities. Specifically,
+`AC-2(4)` is tokenized as `AC-2(4` + `)` — Presidio returns the span `AC-2(4` (no
+closing paren), which NER classifies as a person name. Bare IDs (AC-6, IR-4) and
+two-digit enhancements (AC-6(10)) do not trigger NER. Fix: `_CONTROL_ID_RE` regex
+`^[A-Z]{2,4}-\d+(?:\(\d+\)?)?$` applied as a second post-processing filter alongside
+the domain allowlist. Confirmed: AC-6, AC-2(4), AC-6(2), AC-6(10) all pass through
+unchanged. Real PII (email, phone, SSN, IP) still scrubbed correctly.
 
 **GCP equivalent:** Cloud DLP (Data Loss Prevention) — managed PII detection and redaction
 **Azure equivalent:** Azure AI Language PII detection — managed, same pattern

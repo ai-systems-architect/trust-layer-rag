@@ -185,7 +185,7 @@ integrity and evaluation validity.
 ## Key Architectural Decisions
 
 Full rationale with alternatives evaluated in `docs/decision_log.md`
-(DL-001 through DL-026).
+(DL-001 through DL-027).
 
 | Decision | Choice | Key rationale |
 |----------|--------|---------------|
@@ -253,10 +253,6 @@ PyMuPDF | tiktoken | Terraform
 
 ## Future Work
 
-**[Planned Next] FedRAMP PII allowlist** — Presidio `en_core_web_lg` misclassifies
-"FedRAMP" as a PERSON entity, scrubbing the token from cross-corpus queries before
-embedding. Fix: add an allowlist entry in `utils/pii_filter.py`. Not yet implemented.
-
 **[Stretch] System profile intake** — structured intake of system impact level,
 deployment model, and data types to condition retrieval. Enables control applicability
 answers specific to a target system rather than general corpus lookup.
@@ -277,4 +273,4 @@ retriever config per intent — control lookup favors BM25, synthesis favors den
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
-NIST AI RMF aligned. DL-001 through DL-026.*
+NIST AI RMF aligned. DL-001 through DL-027.*

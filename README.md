@@ -5,6 +5,8 @@ hallucination controls, and full pipeline observability.
 
 **Portfolio:** P2 of 4 — follows [responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
 
+This deployment uses a public RDS endpoint and Streamlit Community Cloud for portfolio accessibility. For regulated workloads, the production path uses private VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in [docs/architecture.md](docs/architecture.md).
+
 ---
 
 ## Architecture
@@ -19,7 +21,7 @@ hallucination controls, and full pipeline observability.
 | Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
 | Tracing | Full pipeline observability | Langfuse Cloud |
 | Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
-| Guardrails | PII + hallucination controls | Bedrock Guardrails |
+| Guardrails | Dual gates — input (prompt injection, off-topic) + output (overclaiming) | Bedrock Guardrails |
 | Evaluation | Golden dataset scoring | RAGAs |
 | Frontend | Chat UI + debug sidebar | Streamlit |
 | Infrastructure | RDS, S3, IAM | Terraform + AWS |
@@ -43,6 +45,21 @@ This pipeline adds production layers motivated by real failure modes:
 | Langfuse tracing | Can't debug or improve what you can't observe |
 | RAGAs evaluation | Quantified retrieval quality against a golden dataset |
 | Provider abstraction layer | Model swappability without pipeline rewrites |
+
+---
+
+## Key Architectural Tradeoffs
+
+| Decision | Chosen | Rejected | Tradeoff |
+|---|---|---|---|
+| Vector store | pgvector on RDS | Pinecone, Weaviate, Qdrant | Single AWS security boundary over managed convenience — one IAM policy, one audit trail |
+| Retrieval | Hybrid dense + BM25 + RRF | Dense-only | Control IDs (AC-6, IR-4) need exact token matching — semantic alone misses them at rank 1 |
+| Reranking | Cohere cross-encoder | Bi-encoder similarity | Joint query+chunk inference produces trained relevance judgment, not geometric distance |
+| Embedding dims | 1536 (Matryoshka truncation) | 3072 full dims | pgvector HNSW 2000-dim ceiling — retains ~99% retrieval quality at half the dimensions |
+| Generation | Claude Sonnet 4.5 via Bedrock | Direct Anthropic API | Bedrock keeps generation within AWS boundary — direct API sends chunks to external endpoint |
+| Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
+
+Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-027).
 
 ---
 
@@ -391,7 +408,7 @@ The `control_family=AC` SQL pre-filter reduces the corpus from 1,696 to 424 chun
 The evaluation dataset showed BM25 fired on control ID queries (NIST 800-53, FedRAMP) and not on governance queries (AI RMF, AI 600-1). MAIN-2 contradicts the second half of that observation: the 9-word governance query fired BM25 at 0.0325/0.0308. Root cause: short queries preserve "govern" as a distinctive BM25 token after stop-word stripping. Evaluation questions were 10–15 words — "govern" was one of many terms and did not anchor alone. Short Streamlit queries behave differently from long evaluation questions. Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category.
 
 **3. FedRAMP PII false positive (MAIN-3)**
-Presidio `en_core_web_lg` classifies "FedRAMP" as a PERSON entity and scrubs it from the query before embedding. The cross-corpus synthesis query ran without the `impact_level=Moderate` filter and without FedRAMP-dense embeddings, retrieving exclusively AI RMF content. The answer correctly declined rather than hallucinating an answer from irrelevant chunks. Fix: add "FedRAMP" to the Presidio allowlist in `utils/pii_filter.py`. Documented as [Planned Next] in Future Work.
+Presidio `en_core_web_lg` classifies "FedRAMP" as a PERSON entity and scrubs it from the query before embedding. The cross-corpus synthesis query ran without the `impact_level=Moderate` filter and without FedRAMP-dense embeddings, retrieving exclusively AI RMF content. The answer correctly declined rather than hallucinating an answer from irrelevant chunks. Fix implemented: `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents FedRAMP, NIST, AWS, Bedrock, FISMA, ATO, and RMF from being scrubbed. See docs/decision_log.md DL-017.
 
 **4. Negative queries refused by corpus grounding, not guardrails**
 All three negative queries produced near-zero rerank scores (max 0.071, 0.000436, 0.002726) because the corpus simply does not contain quantum cryptography, cryptocurrency, or blockchain content. Claude had no relevant context to overclaim from — the answers declined and cited only what was available. Guardrail action `none` on all three is correct: this is corpus grounding working as designed. The Bedrock output guardrail is not the primary defense against out-of-scope queries — retrieval precision is.
@@ -521,15 +538,34 @@ model, stop_reason, and guardrail_action before returning to pipeline.
 control IDs (AC-2, IR-4) before the 5-term BM25 limit ensures identifiers are always
 preserved as high-value anchors. See docs/decision_log.md DL-019.
 
-**[Planned Next] Presidio domain term allowlist** — Presidio `en_core_web_lg` misclassifies
-federal program acronyms (FedRAMP, NIST, AWS, Bedrock) as named entities, scrubbing them
-from queries before embedding. Observed on MAIN-3 cross-corpus synthesis query — "FedRAMP"
-classified as PERSON, FedRAMP corpus not retrieved, answer garbled. Fix: add domain-specific
-acronyms to Presidio recognizer allowlist in `utils/pii_filter.py`. See DL-027.
+**[Implemented] Presidio domain term allowlist** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
+prevents Presidio from scrubbing federal program acronyms (FedRAMP, NIST, AWS, Bedrock, FISMA,
+ATO, RMF) that `en_core_web_lg` NER misclassifies as PERSON entities. Observed on MAIN-3
+cross-corpus synthesis query. Fix: filter analyzer results by matched span before anonymization.
+See docs/decision_log.md DL-017.
+
+**[Planned Next] Manual validation subset** — 5 questions with human-labeled ground truth
+to validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
+label generation.
+
+**[Planned Next] Role-based retrieval filtering** — `sensitivity_level` column in chunks
+table with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already
+exists in metadata filtering layer (DL-023). Applicable when corpus includes controlled
+or sensitivity-tiered documents.
 
 **[Stretch] Structured intent extraction** — classify query intent (control lookup, gap
 assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
 config per intent — control lookup favors BM25, synthesis favors dense.
+
+**[Stretch] Query expansion / cold start** — HyDE or LLM-generated query variants to
+broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
+drift. Dense retrieval on short queries already performs well (MAIN-2); risk is on
+long abstract queries where no single embedding anchors to the right corpus region.
+
+**[Stretch] Real-time faithfulness gate** — if faithfulness score falls below threshold,
+re-attempt retrieval with broader search radius before returning response. Bedrock
+Guardrails provides the current safety floor; this pattern is more appropriate for
+production agentic systems than portfolio RAG.
 
 **[Stretch] Context entities recall** — RAGAs entity-level retrieval metric to verify key
 identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
