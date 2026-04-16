@@ -12,7 +12,7 @@ hallucination controls, and full pipeline observability.
 | Layer | Component | Tool |
 |---|---|---|
 | Ingestion | PDF + Word parsing, chunking | LibreOffice headless (.docx → PDF conversion) + PyMuPDF |
-| Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large |
+| Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large — 1536 dims via Matryoshka truncation from 3072, retains ~99% retrieval quality, resolves pgvector HNSW 2000-dim ceiling (DL-018) |
 | Vector Store | pgvector + HNSW index | RDS PostgreSQL |
 | Query Classification | Rule-based metadata filter inference | Regex classifier in pipeline.py |
 | Retrieval | Dense + sparse fused via RRF, metadata pre-filtered | pgvector + tsvector |
@@ -97,6 +97,22 @@ mid-list precision without displacing already-correct top-1 positions (MRR
 unchanged at Hybrid → H+Rerank, nDCG +0.018). Control ID queries achieve
 perfect MRR 1.00 across all configurations — exact control identifiers anchor
 both dense and BM25 retrieval reliably.
+
+See [docs/evaluation_methodology.md](docs/evaluation_methodology.md) for full metric definitions, formulas, and signal selection rationale.
+
+---
+
+## Known Limitations and Failure Analysis
+
+| # | Failure type | Affected queries | Root cause | Status |
+|---|---|---|---|---|
+| 1 | BM25 sparse=0 on governance queries | AI RMF, AI 600-1 | Governance language (govern, measure, trustworthy) does not survive stop word stripping as distinctive BM25 tokens | By design — dense-only fallback is correct for abstract language |
+| 2 | Control ID truncation by 5-term BM25 limit | Any query with control ID after position 5 | `_sparse_query()` strips stop words and limits to 5 terms — AC-2 or IR-4 appearing late in query dropped | Fixed in DL-019 — regex pre-extraction implemented |
+| 3 | Answer relevancy below 0.70 target | All queries | System prompt compliance hedging penalized by RAGAs which rewards concise direct answers | Accepted — fixing requires weakening safety behavior |
+| 4 | RAGAs multi-part question fragmentation | Architect-level multi-part questions | RAGAs synthetic question generation partially overlaps original questions | Evaluation set limitation — documented in DL-020 |
+| 5 | First hybrid evaluation run invalid | All 20 evaluation queries | BM25 sparse=0 bug present during initial run — hybrid functionally identical to semantic | Resolved before final scores locked |
+
+Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failures 4 and 5 are evaluation methodology artifacts that do not affect production system quality.
 
 ---
 

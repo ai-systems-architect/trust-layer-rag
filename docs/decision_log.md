@@ -652,6 +652,36 @@ gracefully due to Matryoshka training.
 | Qdrant self-hosted | Unlimited | Best-in-class filtering and high-dim performance; right move at 10M+ vectors or sub-10ms P99 |
 | Pinecone managed | Unlimited | Zero ops, strong ecosystem; data leaves AWS boundary |
 
+**Dimension delta analysis — 3072 → 1536:**
+
+text-embedding-3-large uses Matryoshka Representation Learning (MRL) — the model is
+trained so that leading dimensions carry the strongest semantic signal. Truncation
+removes the trailing, lower-signal dimensions rather than any random subset.
+
+OpenAI internal benchmarks show 1536-dim embeddings retain approximately 98–99% of
+retrieval quality versus full 3072-dim on MTEB retrieval benchmarks. The 1–2% quality
+delta is acceptable given the infrastructure constraint — corpus is English-only
+regulatory text (NIST, FedRAMP), not multilingual or domain-shifting data where
+higher dimensionality matters more.
+
+| Dimensions | Index type | MTEB quality | Notes |
+|---|---|---|---|
+| 3072 | Not possible with HNSW | 100% (baseline) | Cannot use at this pgvector version |
+| 1536 | HNSW ✅ | ~98–99% | Applied in this project |
+| 1024 | HNSW ✅ | ~95–96% | Acceptable floor if storage is constrained |
+| 512 | HNSW ✅ | ~90–92% | Noticeable quality drop for regulatory text |
+
+**Upgrade path to full 3072 dims (when ceiling is removed):**
+pgvector 0.7.0+ raises the HNSW ceiling to 4000 dims via the `halfvec` storage type.
+Upgrade path on RDS when pgvector 0.7.0 is available:
+1. Confirm pgvector version: `SELECT extversion FROM pg_extension WHERE extname='vector'`
+2. Alter column type: `ALTER TABLE chunks ALTER COLUMN embedding TYPE halfvec(3072)`
+3. Rebuild index: `DROP INDEX chunks_embedding_idx; CREATE INDEX ... USING hnsw (embedding halfvec_cosine_ops)`
+4. Re-embed all chunks at 3072 dims via `ingestion/embed.py` with `EMBEDDING_DIMENSIONS=3072`
+5. Re-embedding cost: 1,696 chunks at $0.00013 per 1K tokens ≈ $0.07 total — identical to original run
+
+The migration is mechanical — no pipeline code changes required beyond the env var.
+
 **When to revisit:**
 - Corpus grows beyond ~100K chunks and sequential scan latency becomes
   unacceptable — migrate to Qdrant self-hosted
@@ -1184,3 +1214,34 @@ returning an explanation.
 - Increase `_MAX_HISTORY_MESSAGES` if longer conversations show degraded resolution
 - Extend `_AMBIGUOUS_PRONOUNS` if new reference patterns are observed in Langfuse traces
 - Add `_MAX_HISTORY_MESSAGES` to `config.py` as a tunable parameter if tuning need arises
+
+---
+
+## DL-026 — P2 Project Closure
+**Date:** 2026-04-15
+
+All planned pipeline enhancements for governed-compliance-engine are implemented and
+documented. Items completed since initial RAGAs evaluation (DL-020):
+
+| Item | Decision | Reference |
+|---|---|---|
+| Item 8 | Pydantic response validation on generate() output | commit 68a1847 |
+| Item 9 | Adversarial guardrail evaluation — two-signal pass detection | commit 4fb79a1 |
+| Item 10 | Retrieval diagnostics — Recall@k, MRR, nDCG across 3 configurations | DL-021 |
+| Item 11 | BM25 control ID preservation — regex pre-extraction before 5-term limit | commit e3574f8, DL-019 |
+| Item 12 | Input-side query guardrail — dual guardrail architecture | DL-022 |
+| Item 13 | PII filtering — Presidio at query input and generated output | DL-017 update |
+| Item 14 | Metadata-aware retrieval — control_family + impact_level SQL pre-filters | DL-023 |
+| Item 15 | Post-RRF quality gate — MIN_RRF_SCORE=0.0150, MIN_RRF_CANDIDATES=3 | DL-024 |
+| Item 16 | Retrieval-side conversational memory — query enrichment via Bedrock Claude | DL-025 |
+| Item 17 | Matryoshka benchmark — dimension delta analysis documented | DL-018 update |
+
+Deferred items (evaluated and deprioritized — see README Future Work):
+- **FedRAMP PII allowlist** — Presidio en_core_web_lg misclassifies "FedRAMP" as PERSON; fix is an allowlist in `utils/pii_filter.py`; not implemented
+- **System profile intake** — conditions retrieval on user system impact level; deferred until P4 agent architecture
+- **Control checklist generation** — second LLM call for structured output; deferred; adds cost per query
+- **Long-term session memory** — cross-session persistence in RDS; deferred; P4 agent has this from day one
+- **Structured intent extraction** — query intent classification for routing; deferred; rule-based classify_query() covers primary use case
+
+Evaluation methodology documented in `docs/evaluation_methodology.md`.
+P2 is closed. P4 (compliance-triage-agent) is the next portfolio project.

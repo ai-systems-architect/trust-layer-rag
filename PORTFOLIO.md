@@ -41,10 +41,12 @@ frameworks a federal AI system must navigate from design through ATO.
 ## Pipeline Architecture
 
 ```
-Query → Embed → Hybrid Retrieval (top-10) → Cohere Rerank (top-5)
-      → Bedrock Guardrails → Claude Sonnet 4.5 → Answer
+Query → PII Scrub (Presidio) → Input Guardrail (Bedrock) → Query Enrichment
+      → Metadata-Filtered Hybrid Retrieval (top-10) → Post-RRF Quality Gate
+      → Cohere Rerank (top-5) → Claude Sonnet 4.5 (Bedrock) → Output Guardrail
+      → PII Scrub (output) → Answer
       → Langfuse Trace (retrieve / rerank / generate spans)
-      → Streamlit UI (answer + source citations + metadata)
+      → Streamlit UI (answer + enriched query label + source citations + metadata)
 ```
 
 Each stage is a standalone module. The `use_hybrid` flag in `pipeline.py`
@@ -61,13 +63,14 @@ other component — both retrievers return identical output shape.
   idempotent upsert to RDS
 
 **Retrieval layer**
-- `retrieval/semantic.py` — pgvector HNSW cosine search, top-10
-- `retrieval/hybrid.py` — dense + tsvector BM25 fused via RRF (k=60), top-10
+- `retrieval/semantic.py` — pgvector HNSW cosine search, top-10, metadata pre-filter support
+- `retrieval/hybrid.py` — dense + tsvector BM25 fused via RRF (k=60), top-10, post-RRF quality gate (MIN_RRF_SCORE=0.0150)
+- `retrieval/query_enrichment.py` — rewrites ambiguous follow-up queries via Bedrock Claude at temperature=0.0
 - `retrieval/rerank.py` — Cohere rerank-english-v3.0 cross-encoder, top-10 → top-5
 
 **Generation layer**
 - `generation/generate.py` — Claude Sonnet 4.5 via Bedrock converse API,
-  Guardrails conditional on BEDROCK_GUARDRAIL_ID
+  dual guardrails (input gate + output guardrailConfig), Pydantic response validation
 
 **Observability layer**
 - `tracing/tracer.py` — Langfuse Cloud client, span per pipeline stage
@@ -78,10 +81,10 @@ other component — both retrievers return identical output shape.
 - `evaluation/ragas_eval.py` — RAGAs evaluation, semantic vs hybrid
   comparison, results saved to data/ragas_results.json
 
-**Orchestration and UI**
-- `pipeline.py` — full orchestrator with Langfuse instrumentation
-- `app.py` — Streamlit chat interface with hybrid toggle, source citations,
-  guardrail action display, trace ID per response
+**Pipeline and UI**
+- `pipeline.py` — full orchestrator: PII scrub → input guardrail → query enrichment → classify → retrieve → rerank → generate
+- `utils/pii_filter.py` — Presidio scrub at query input and generated output
+- `app.py` — Streamlit chat interface with hybrid toggle, enriched query label, source citations, filter label, guardrail action, trace ID per response
 
 ---
 
@@ -92,13 +95,18 @@ additional layer here exists because of a specific production failure mode.
 
 | Layer | Why it exists |
 |-------|---------------|
+| PII scrub (Presidio) at input and output | Query text and generated answers scrubbed before any external service call — embedding, reranking, and Langfuse traces receive clean content |
+| Input guardrail (Bedrock) before retrieval | Blocks prompt injection and off-topic queries before pgvector, Cohere, or Claude are invoked — one Bedrock call cost vs full pipeline |
+| Query enrichment via Bedrock Claude | Pronoun follow-ups ("how does that relate to…") resolved before embedding — retriever embeds a fully specified query, not an unresolved reference |
+| Metadata-filtered retrieval (control_family, impact_level) | Rule-based classifier pre-filters the vector search to the relevant NIST family or FedRAMP baseline — reduces noise before RRF fusion |
+| Post-RRF quality gate | RRF ranks weak candidates against each other regardless of absolute score — gate (MIN_RRF_SCORE=0.0150) stops noise reaching Cohere |
 | Hybrid retrieval — dense + BM25 + RRF | Keyword queries fail pure semantic search — control identifiers like AC-6 and IR-4 are high-value BM25 targets |
 | Cohere cross-encoder reranking | Bi-encoder similarity has a precision ceiling — cross-encoder sees query and chunk together, producing a trained relevance judgment |
-| Bedrock Guardrails | Overclaiming risk is high in federal compliance context — a system that asserts authorization status is a liability |
+| Bedrock Guardrails (dual — input + output) | Overclaiming risk is high in federal compliance — input gate blocks before retrieval fires, output gate catches generation overclaiming |
 | Langfuse Cloud tracing | Cannot debug or improve what cannot be observed — every retrieval, rerank, and generation call traced end-to-end |
 | RAGAs evaluation against golden dataset | Quantified retrieval quality, not subjective assessment — semantic vs hybrid comparison produces a defensible result |
 | Provider abstraction layer | Embedding and generation models swappable via environment variables without pipeline rewrites |
-| AWS boundary for corpus and generation | Corpus vectors remain in AWS (RDS pgvector + S3). Query text is sent to OpenAI for embedding. Top-10 retrieved chunks are sent to Cohere for reranking. Traces are sent to Langfuse Cloud. Generation stays within AWS via Bedrock |
+| AWS boundary for corpus and generation | Corpus vectors remain in AWS (RDS pgvector + S3). Query text to OpenAI for embedding. Chunks to Cohere for reranking. Traces to Langfuse Cloud. Generation stays within AWS via Bedrock |
 
 ---
 
@@ -122,10 +130,10 @@ high-ranked results from dominating while preserving rank signal.
 **BM25 query preprocessing:** Long natural language questions AND-chain
 all terms via plainto_tsquery, returning zero results when no single
 chunk contains every term simultaneously. Preprocessing strips stop words
-and limits to five key terms before passing to BM25. Known limitation:
-control identifiers (AC-6, IR-4) may be dropped if they fall after the
-five-term limit — regex pre-extraction of control IDs is a documented
-future enhancement (see docs/decision_log.md DL-019).
+and limits to five key terms before passing to BM25. Control identifiers
+(AC-6, IR-4) are regex-extracted from the original query before the
+five-term limit applies — they always occupy the leading slots as
+high-value BM25 anchors (see docs/decision_log.md DL-019).
 
 **Cohere reranking:** The cross-encoder reads query and chunk together —
 joint inference via attention mechanism — producing a relevance probability
@@ -177,7 +185,7 @@ integrity and evaluation validity.
 ## Key Architectural Decisions
 
 Full rationale with alternatives evaluated in `docs/decision_log.md`
-(DL-001 through DL-020).
+(DL-001 through DL-026).
 
 | Decision | Choice | Key rationale |
 |----------|--------|---------------|
@@ -245,32 +253,28 @@ PyMuPDF | tiktoken | Terraform
 
 ## Future Work
 
-**System profile intake** — structured intake of system impact level,
-deployment model, and data types to condition retrieval. Enables
-control applicability answers specific to a target system rather than
-general corpus lookup.
+**[Planned Next] FedRAMP PII allowlist** — Presidio `en_core_web_lg` misclassifies
+"FedRAMP" as a PERSON entity, scrubbing the token from cross-corpus queries before
+embedding. Fix: add an allowlist entry in `utils/pii_filter.py`. Not yet implemented.
 
-**Control checklist generation** — second LLM call post-retrieval to
-structure answers as actionable, system-specific control checklists
-rather than prose summaries.
+**[Stretch] System profile intake** — structured intake of system impact level,
+deployment model, and data types to condition retrieval. Enables control applicability
+answers specific to a target system rather than general corpus lookup.
 
-**PII filtering** — production deployment requires PII detection and
-redaction at query input, corpus ingestion, and generated output.
-Microsoft Presidio or AWS Comprehend recommended. Langfuse traces
-should be scrubbed at source to prevent PII persistence.
+**[Stretch] Control checklist generation** — second LLM call post-retrieval to
+structure answers as actionable, system-specific control checklists rather than prose
+summaries.
 
-**Metadata filtering** — pre-filtering chunks by source document or
-impact level before vector search, recommended as corpus expands
-beyond four documents. Pairs with system profile intake.
+**[Stretch] Long-term conversational memory (cross-session)** — persist user system
+profile in RDS keyed by user ID. Within-session pronoun enrichment is implemented
+(DL-025). Cross-session persistence is the remaining gap.
 
-**Retrieval-side conversational memory** — conversation history
-currently passed to generation only. Prior turns should condition
-the retrieval query — a user who asked about AC-6 then asks "what
-about logging requirements" should retrieve AU controls relevant to
-access control logging, not generic AU chunks.
+**[Stretch] Structured intent extraction** — classify query intent (control lookup,
+gap assessment, cross-framework synthesis) before retrieval. Route to appropriate
+retriever config per intent — control lookup favors BM25, synthesis favors dense.
 
 ---
 
-*Generation and vector store within AWS boundary. RAGAs evaluated.
-Bedrock Guardrails enforced. GCP and Azure equivalents documented.
-NIST AI RMF aligned.*
+*Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
+enforced. PII filtered at input and output. GCP and Azure equivalents documented.
+NIST AI RMF aligned. DL-001 through DL-026.*
