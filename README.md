@@ -85,12 +85,12 @@ from token overlap with reference answers across a broad candidate pool.
 | Cross-corpus (n=3) | 0.1130 | 0.1258 | 0.1258 | 0.6667 | 0.6667 | 0.6667 |
 | **Average (n=20)** | **0.1691** | **0.1729** | **0.1768** | **0.9000** | **0.9250** | **0.9250** |
 
-nDCG@5 — Semantic: 0.888 | Hybrid: 0.909 | Hybrid+Rerank: 0.927
+nDCG@5 — Semantic: 0.8883 | Hybrid: 0.9092 | Hybrid+Rerank: 0.9265
 
 The most relevant chunk surfaces at rank 1 for 90%+ of questions (MRR 0.90+).
 Recall@5 appears low (0.17) because the ground truth pool averages 28 chunks
 per question — top-5 retrieval capturing 17% of 28 labeled chunks reflects the
-large denominator, not a retrieval failure. nDCG@5 progression (0.888 → 0.909
+large denominator, not a retrieval failure. nDCG@5 progression (0.8883 → 0.9092
 → 0.927) confirms each pipeline layer adds ranking quality: RRF fusion improves
 governance query ranking (MRR 0.875 → 0.938), Cohere cross-encoder refines
 mid-list precision without displacing already-correct top-1 positions (MRR
@@ -134,7 +134,7 @@ Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 ## Pipeline
 
 ```
-query → [Input Guardrail] → [Enrich] → [Classify] → Retrieval (pre-filtered) → Reranking → Generation → [Output Guardrail] → response
+query → [PII Scrub] → [Input Guardrail] → [Enrich] → [Classify] → Retrieval (pre-filtered) → [Post-RRF Gate] → Reranking → Generation → [Output Guardrail] → [PII Scrub] → response
 ```
 
 Dual guardrail architecture — input gate blocks before retrieval fires, output gate
