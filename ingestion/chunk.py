@@ -3,6 +3,7 @@ import logging
 import re
 from collections import Counter
 from pathlib import Path
+from typing import Optional
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -49,7 +50,7 @@ _VALID_800_53_FAMILIES = {
 }
 
 
-def extract_control_family(text: str) -> str | None:
+def extract_control_family(text: str) -> Optional[str]:
     """Extract the dominant NIST 800-53 control family from chunk text.
 
     Scans for all control ID patterns and returns the most frequently
@@ -70,7 +71,7 @@ def extract_control_family(text: str) -> str | None:
     return Counter(valid).most_common(1)[0][0]
 
 
-def extract_impact_level(source_key: str) -> str | None:
+def extract_impact_level(source_key: str) -> Optional[str]:
     """Return FedRAMP impact level for FedRAMP source chunks, None otherwise.
     Impact level is source-derived, not extracted from text — the corpus
     currently contains only the Moderate baseline. Extend _FEDRAMP_IMPACT

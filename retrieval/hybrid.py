@@ -1,5 +1,6 @@
 import logging
 import re
+from typing import Optional
 
 from config import TOP_K_RETRIEVAL
 from retrieval.semantic import embed_query, get_connection
@@ -71,9 +72,9 @@ def dense_search(
     conn,
     vector: list[float],
     top_k: int,
-    source: str | None = None,
-    control_family: str | None = None,
-    impact_level: str | None = None,
+    source: Optional[str] = None,
+    control_family: Optional[str] = None,
+    impact_level: Optional[str] = None,
 ) -> list[dict]:
     """pgvector HNSW cosine search — dense retrieval leg.
 
@@ -124,9 +125,9 @@ def sparse_search(
     conn,
     query: str,
     top_k: int,
-    source: str | None = None,
-    control_family: str | None = None,
-    impact_level: str | None = None,
+    source: Optional[str] = None,
+    control_family: Optional[str] = None,
+    impact_level: Optional[str] = None,
 ) -> list[dict]:
     """tsvector GIN BM25-style keyword search — sparse retrieval leg.
 
@@ -219,9 +220,9 @@ def reciprocal_rank_fusion(
 def hybrid_search(
     query: str,
     top_k: int = TOP_K_RETRIEVAL,
-    source: str | None = None,
-    control_family: str | None = None,
-    impact_level: str | None = None,
+    source: Optional[str] = None,
+    control_family: Optional[str] = None,
+    impact_level: Optional[str] = None,
 ) -> list[dict]:
     """Hybrid retrieval: dense (pgvector) + sparse (tsvector) fused via RRF.
 

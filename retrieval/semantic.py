@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import psycopg2
 from openai import OpenAI
@@ -46,9 +47,9 @@ def embed_query(query: str) -> list[float]:
 def semantic_search(
     query: str,
     top_k: int = TOP_K_RETRIEVAL,
-    source: str | None = None,
-    control_family: str | None = None,
-    impact_level: str | None = None,
+    source: Optional[str] = None,
+    control_family: Optional[str] = None,
+    impact_level: Optional[str] = None,
 ) -> list[dict]:
     """Dense retrieval via pgvector HNSW cosine similarity.
 
