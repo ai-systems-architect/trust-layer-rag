@@ -1020,3 +1020,70 @@ flag documents intent explicitly — an accidental `python db/setup.py` call
 - Add agency SSPs → add `agency` metadata column, extend classifier
 - Add system profile intake (future work) → user-supplied impact level and
   control families override classifier output, enabling scoped retrieval per session
+
+---
+
+## DL-024 — Post-RRF Quality Gate
+**Date:** 2026-04-15
+
+**Decision:** Apply a minimum RRF score threshold (`MIN_RRF_SCORE = 0.0150`) after
+Reciprocal Rank Fusion and before passing candidates to Cohere reranking. Candidates
+below the threshold are dropped. A safety floor (`MIN_RRF_CANDIDATES = 3`) guarantees
+at least 3 candidates always reach Cohere.
+
+**Rationale:** RRF produces a ranked list regardless of absolute retrieval quality.
+In queries where neither dense nor sparse retrieval finds strong matches, RRF still
+outputs the requested number of candidates — just weak ones ranked against each other.
+Passing all of them to Cohere wastes rerank quota on noise and can surface low-quality
+chunks in top-5 when no better candidates exist. The threshold stops this without
+changing the retrieval architecture.
+
+**Score distribution — empirical (k=60, top_k=10, corpus 1,696 chunks):**
+
+| Score range | Meaning |
+|---|---|
+| 0.030–0.033 | Appeared in both dense and sparse at high rank — strong signal |
+| 0.016–0.017 | Rank 1 in one leg only |
+| 0.014–0.016 | Single-leg tail, ranks 2–10 |
+| 0.01429 | Theoretical minimum — rank 10 in one leg, not in the other |
+
+The spec-suggested threshold of 0.008 was evaluated and rejected: with `k=60` and
+`top_k=10`, the minimum possible RRF score is `1/(60+10) = 0.0143`. A threshold below
+0.0143 is a no-op — it can never fire on this retrieval configuration. Setting 0.008
+would add the infrastructure without any operational effect.
+
+**Threshold calibration — 0.0150:**
+Empirical score distribution across 7 representative queries (Control ID, Governance,
+Cross-corpus, FedRAMP-specific, niche technical):
+- Score gap between double-boosted group (0.030+) and single-leg tail (0.014–0.016) is
+  visible but gradual — there is no clean noise floor at this corpus scale
+- 0.0150 drops single-leg candidates at ranks 7–10 (scores 0.0143–0.0150)
+- Results: average **8.1 of 10 candidates pass** per query; safety floor triggered 0 of 7 queries
+- Range: 6–10 candidates per query depending on BM25 signal strength
+
+**Why 0.0150 and not higher (e.g. 0.016):**
+0.016 would drop all single-leg results — only double-boosted chunks pass. For queries
+where BM25 returns sparse=0 (AI RMF, AI 600-1 governance queries), ALL candidates are
+single-leg, and a 0.016 threshold would trigger the safety floor on every such query,
+reducing Cohere input to 3. This degrades reranking quality without evidence that the
+single-leg candidates are weak — dense retrieval alone is correct for these queries.
+0.0150 is the conservative choice that drops proven tail noise without over-filtering.
+
+**Safety floor design:**
+`MIN_RRF_CANDIDATES = 3` — always pass at least 3 candidates to Cohere even if the
+threshold filters them all. The reranker needs a minimum comparison set to be
+meaningful. Floor of 3 ensures Cohere always has something to rank. Set to 3 rather
+than 1 because cross-encoder reranking on a single candidate is pointless.
+
+**Tunability:**
+Both `MIN_RRF_SCORE` and `MIN_RRF_CANDIDATES` are read from environment variables —
+operators can tune without code changes. At corpus expansion (10K+ chunks), the score
+distribution will shift — lower-ranked candidates will score lower as the retrieval
+pool grows, and the threshold may need upward revision.
+
+**Filter visibility:**
+Logged at INFO level per query: `post-RRF filter: N/M candidates passed threshold=0.0150`.
+Visible in application logs for every request — observable without Langfuse.
+
+**Files changed:** `config.py` (MIN_RRF_SCORE, MIN_RRF_CANDIDATES), `retrieval/hybrid.py`
+(filter logic with safety floor after `reciprocal_rank_fusion()`)

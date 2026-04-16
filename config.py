@@ -57,6 +57,18 @@ RETRIEVAL_PRECISION_THRESHOLD = float(os.getenv("RETRIEVAL_PRECISION_THRESHOLD",
 TOP_K_RETRIEVAL = int(os.getenv("TOP_K_RETRIEVAL", "10"))
 TOP_K_RERANK = int(os.getenv("TOP_K_RERANK", "5"))
 
+# Post-RRF quality gate — minimum RRF score for a candidate to proceed to Cohere reranking.
+# With k=60 and top_k=10, RRF scores range from 0.0143 (rank 10, single leg) to 0.033+
+# (rank 1 in both dense and sparse). Threshold of 0.0150 drops the weakest single-leg
+# tail candidates (ranks 7–10, scores 0.0143–0.0150), reducing Cohere input from 10 to
+# 6–10 candidates per query (average 8.1 across 7 representative queries). Safety floor
+# (MIN_RRF_CANDIDATES) guarantees at least 3 candidates always reach Cohere — prevents
+# empty rerank on filtered sparse corpora.
+# Effective threshold range for this corpus: 0.0143 (no-op) to 0.0164 (aggressive).
+# see docs/decision_log.md DL-024
+MIN_RRF_SCORE = float(os.getenv("MIN_RRF_SCORE", "0.0150"))
+MIN_RRF_CANDIDATES = int(os.getenv("MIN_RRF_CANDIDATES", "3"))
+
 # =============================================================================
 # CORPUS CONFIGURATION
 # Decision: Four authoritative federal sources — NIST 800-53, AI RMF,

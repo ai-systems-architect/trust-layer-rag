@@ -37,6 +37,7 @@ This pipeline adds production layers motivated by real failure modes:
 | Addition | Why it exists |
 |----------|---------------|
 | Hybrid retrieval (dense + BM25 + RRF) | Keyword queries fail pure semantic search |
+| Post-RRF quality gate | RRF ranks weak candidates against each other — gate stops noise reaching Cohere |
 | Cohere reranking | Bi-encoder similarity has a precision ceiling |
 | Bedrock Guardrails | Overclaiming risk is high in federal compliance context |
 | Langfuse tracing | Can't debug or improve what you can't observe |
@@ -142,10 +143,20 @@ parsed, chunked, embedded, and stored in pgvector on RDS. Each chunk carries
 (FedRAMP impact, source-derived) metadata columns for pre-filter support.
 
 **Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused
-via Reciprocal Rank Fusion. Returns top-10 chunks.
+via Reciprocal Rank Fusion. Returns up to top-10 chunks.
 
-**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores all 10 chunks
-jointly against the query. Returns top-5.
+**Post-RRF Quality Gate** — Candidates below `MIN_RRF_SCORE = 0.0150` are dropped
+before Cohere sees them. RRF produces a ranked list regardless of absolute match
+quality — the gate stops weak candidates from consuming rerank quota. Safety floor
+of 3 candidates guaranteed. Threshold derived from empirical score distribution
+across 7 representative query types: 6–10 candidates pass per query, average 8.1
+of 10; safety floor triggered on 0 of 7 queries. Threshold 0.0150 was set from
+first principles — the commonly cited 0.008 does not apply when k=60, because the
+theoretical minimum RRF score with top_k=10 is 1/(60+10) = 0.0143, making anything
+below that a no-op. See docs/decision_log.md DL-024.
+
+**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores the filtered
+candidate set jointly against the query. Returns top-5.
 
 **Generation** — Claude Sonnet 4.5 via Amazon Bedrock.
 

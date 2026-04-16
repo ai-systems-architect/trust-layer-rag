@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Optional
 
-from config import TOP_K_RETRIEVAL
+from config import TOP_K_RETRIEVAL, MIN_RRF_SCORE, MIN_RRF_CANDIDATES
 from retrieval.semantic import embed_query, get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -266,8 +266,39 @@ def hybrid_search(
         source, control_family, impact_level,
     )
 
-    results = reciprocal_rank_fusion(dense, sparse)
-    return results[:top_k]
+    fused = reciprocal_rank_fusion(dense, sparse)
+
+    # --- post-RRF quality gate ---
+    # Drop candidates below MIN_RRF_SCORE before passing to Cohere reranker.
+    # RRF score reflects how consistently a chunk appeared at the top of both
+    # retrieval legs — low scores indicate a chunk surfaced weakly in only one
+    # leg at a low rank. Passing weak candidates to Cohere wastes rerank quota
+    # and can surface noise in the top-5 if no strong candidates are available.
+    #
+    # Score context for this corpus (k=60, top_k=10):
+    #   0.030+  : appeared in both dense and sparse at high rank (strong signal)
+    #   0.0164  : rank 1 in one leg only  (1/(60+1))
+    #   0.0143  : rank 10 in one leg only (1/(60+10)) — theoretical minimum
+    #
+    # MIN_RRF_SCORE=0.0150 drops single-leg tail candidates at ranks 7–10.
+    # Empirical results across 7 representative query types: 6–10 candidates
+    # pass per query, average 8.1 of 10 — safety floor did not trigger.
+    #
+    # Safety floor: always pass at least MIN_RRF_CANDIDATES to Cohere.
+    # Prevents empty rerank on sparse corpora or heavily filtered candidate sets
+    # where no chunk clears the threshold.
+    # see docs/decision_log.md DL-024
+    filtered = [r for r in fused if r["score"] >= MIN_RRF_SCORE]
+    if len(filtered) < MIN_RRF_CANDIDATES:
+        # floor triggered — take top N regardless of score
+        filtered = fused[:MIN_RRF_CANDIDATES]
+
+    logger.info(
+        "post-RRF filter: %d/%d candidates passed threshold=%.4f (floor=%d)",
+        len(filtered), len(fused), MIN_RRF_SCORE, MIN_RRF_CANDIDATES,
+    )
+
+    return filtered[:top_k]
 
 
 if __name__ == "__main__":
