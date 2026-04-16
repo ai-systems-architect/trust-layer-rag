@@ -24,3 +24,6 @@ infrastructure/.terraform/
 
 # Claude Code
 .claude/
+
+# Scratch — local debug scripts and one-off utilities, not versioned
+scratch/

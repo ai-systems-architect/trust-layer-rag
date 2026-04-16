@@ -295,16 +295,28 @@ implemented. Would enable the system to answer "given your Moderate-impact SaaS
 system, here are the AC controls you still need to address" rather than answering
 generically on every session. Pairs with system profile intake future work item.
 
-**[Production Required] PII filtering** — production deployment requires PII detection and redaction at
-query input (before embedding), corpus ingestion (before chunking), and generated
-output (before UI rendering). Microsoft Presidio or AWS Comprehend recommended.
-Langfuse traces should be scrubbed at source to prevent PII persistence in the
-observability store. See docs/decision_log.md DL-017.
+**[Implemented] PII filtering** — Presidio scrub at query input and generated output. Corpus
+ingestion scrubbing and Langfuse trace scrubbing at source remain production-only items.
+AWS Comprehend is the recommended production path. See docs/decision_log.md DL-017.
 
-**[Production Required] Query guardrail** — validate and sanitize query input before embedding. Block
-prompt injection attempts, extremely long inputs, and non-compliance queries. Bedrock
-Guardrails currently applied at generation output only — input-side validation is a
-separate enforcement layer.
+**[Implemented] Input-side query guardrail** — Bedrock Guardrails `apply_guardrail` blocks
+prompt injection, off-topic queries, and jailbreak patterns before retrieval fires.
+Dual guardrail architecture: input gate + output guardrailConfig. See docs/decision_log.md DL-022.
+
+**[Implemented] Post-RRF filter enforcement** — MIN_RRF_SCORE=0.0150 gate drops weak candidates
+before Cohere sees them. Safety floor of 3 candidates guaranteed. See docs/decision_log.md DL-024.
+
+**[Implemented] Pydantic response validation** — `GenerateResponse` model validates answer,
+model, stop_reason, and guardrail_action before returning to pipeline.
+
+**[Implemented] Control ID preservation in sparse preprocessing** — regex pre-extraction of
+control IDs (AC-2, IR-4) before the 5-term BM25 limit ensures identifiers are always
+preserved as high-value anchors. See docs/decision_log.md DL-019.
+
+**[Planned Next] FedRAMP PII allowlist** — Presidio `en_core_web_lg` misclassifies "FedRAMP"
+as a PERSON entity, scrubbing the token from cross-corpus queries before embedding. Fix:
+add an allowlist entry in `utils/pii_filter.py` using Presidio's `NLP_ARTIFACTS` deny-list
+override. Observed during worked examples run on MAIN-3 cross-corpus synthesis query.
 
 **[Stretch] Structured intent extraction** — classify query intent (control lookup, gap
 assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
@@ -314,17 +326,3 @@ config per intent — control lookup favors BM25, synthesis favors dense.
 identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
 Recall@k and MRR baselines are established — entity recall is a refinement on standard
 retrieval diagnostics, not a replacement.
-
-**[Planned Next] Post-RRF filter enforcement** — after RRF fusion, enforce minimum relevance
-threshold before passing candidates to Cohere. Currently all top-10 RRF results pass to
-reranker regardless of score — low-quality candidates consume rerank quota without
-improving precision.
-
-**[Planned Next] Pydantic response validation** — validate generate() output structure before
-returning to pipeline. Enforce citation presence, answer length bounds, and guardrail
-action handling. Prevents silent failures from upstream Bedrock changes.
-
-**[Planned Next] Control ID preservation in sparse preprocessing** — `_sparse_query()` strips stop
-words and limits to 5 terms; control identifiers (AC-2, IR-4) appearing after position 5
-are dropped. Regex pre-extraction of control IDs before term limiting would ensure they
-are always preserved as high-value BM25 anchors. See docs/decision_log.md DL-019.
