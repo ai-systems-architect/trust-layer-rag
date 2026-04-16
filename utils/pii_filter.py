@@ -26,6 +26,7 @@ Setup: python -m spacy download en_core_web_lg (required once, ~750MB model)
 see docs/decision_log.md DL-017
 """
 import logging
+import re
 
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
@@ -37,6 +38,40 @@ logger = logging.getLogger(__name__)
 # are ~10–30ms. Initializing per-call would add 2–3s latency to every query.
 _analyzer = AnalyzerEngine()
 _anonymizer = AnonymizerEngine()
+
+# NIST control identifier pattern — matches bare control IDs and parenthetical
+# enhancements as SpacyNER returns them.
+#
+# SpacyNER tokenizes AC-2(4) as two tokens: "AC-2(4" + ")". The span Presidio
+# returns for the PERSON entity is therefore "AC-2(4" (no closing paren).
+# The regex handles both forms defensively:
+#   AC-6        — bare control ID
+#   AC-2(4      — single-digit enhancement, closing paren already consumed by tokenizer
+#   AC-2(4)     — full form (defensive)
+#   AC-6(10)    — two-digit enhancement (does not trigger NER in practice, included anyway)
+#
+# Family prefix: 2–4 uppercase letters (AC, IR, SC, AU, CM, SA, SI, SR, MA, MP, etc.)
+# see docs/decision_log.md DL-017
+_CONTROL_ID_RE = re.compile(r"^[A-Z]{2,4}-\d+(?:\(\d+\)?)?$")
+
+# Domain-specific terms that Presidio's NER model misclassifies as PII (typically PERSON).
+# en_core_web_lg recognises "FedRAMP" as a named entity; "AWS", "NIST", "Bedrock" can
+# also trigger NER false positives depending on surrounding context.
+# Any analyzer result whose matched span is exactly one of these strings is dropped
+# before anonymization — the original text passes through unchanged for that span.
+# see docs/decision_log.md DL-017
+_DOMAIN_ALLOWLIST: frozenset[str] = frozenset({
+    # Authorization and compliance programs
+    "FedRAMP", "FISMA", "ATO", "RMF", "OSCAL",
+    # Standards bodies and frameworks
+    "NIST", "MITRE", "ATT&CK",
+    # Cloud and infrastructure
+    "AWS", "Bedrock", "IAM", "FIPS", "SIEM",
+    # Federal roles and documents
+    "ISSO", "ISSM", "CISO", "SSP", "POA&M", "CONOPS",
+    # Operations
+    "SOC",
+})
 
 # Entity types scoped to patterns likely in compliance queries.
 # Exclusions:
@@ -78,13 +113,34 @@ def scrub(text: str) -> str:
         "Review SSN 123-45-6789 handling under NIST"
         → "Review SSN <US_SSN> handling under NIST"
 
-    Control identifiers (AC-2, IR-4, SC-28, MAP-1.1) are not scrubbed —
-    Presidio does not confuse uppercase NIST control IDs with PII patterns.
-    Verified: AC-2, IR-4, AU-12, SC-28, CM-7 all pass through unchanged."""
+    Domain terms in _DOMAIN_ALLOWLIST pass through unchanged even if Presidio's
+    NER model would otherwise classify them as PERSON entities:
+        "FedRAMP access control requirements"
+        → "FedRAMP access control requirements"  (FedRAMP not scrubbed)
+
+    NIST control identifiers and enhancements are never scrubbed — matched
+    against _CONTROL_ID_RE after analysis:
+        "AC-6 requires limiting access. See AC-2(4) and AC-6(2)."
+        → "AC-6 requires limiting access. See AC-2(4) and AC-6(2)."
+
+    Note: SpacyNER classifies single-digit enhancements (AC-2(4)) as PERSON
+    at score 0.85. The regex catches the span Presidio returns ("AC-2(4"
+    without closing paren) before anonymization runs."""
     if not text or not text.strip():
         return text
 
     results = _analyzer.analyze(text=text, language="en", entities=_ENTITIES)
+    if not results:
+        return text
+
+    # Drop false positives before anonymization:
+    # 1. Exact allowlist match — federal acronyms (FedRAMP, NIST, AWS, …)
+    # 2. NIST control ID pattern — AC-6, IR-4, AC-2(4, AC-6(2, etc.
+    results = [
+        r for r in results
+        if text[r.start:r.end] not in _DOMAIN_ALLOWLIST
+        and not _CONTROL_ID_RE.match(text[r.start:r.end])
+    ]
     if not results:
         return text
 

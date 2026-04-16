@@ -1,5 +1,6 @@
 import logging
 import re
+import sys
 from typing import Optional
 
 from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
@@ -225,7 +226,8 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
-    sample_query = "What controls govern access management in federal systems?"
+    _default = "What does AC-6 require and what are its key enhancements?"
+    sample_query = sys.argv[1] if len(sys.argv) > 1 else _default
 
     print(f"\nQuery: {sample_query}\n")
     print("Running pipeline (hybrid retrieval)...")
