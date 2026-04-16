@@ -190,6 +190,213 @@ four corpus sources including cross-corpus synthesis questions.
 
 ---
 
+## Worked Examples
+
+Three representative queries run end-to-end against the live pipeline. Negative test
+cases follow. All traces visible in Langfuse Cloud.
+
+---
+
+### Example 1 — Control ID lookup
+
+**Query:** "What does AC-6 require and what are its key enhancements?"
+
+**Retrieval — 7 candidates after RRF (control_family=AC filter applied)**
+
+| Rank | Source | RRF Score | BM25 | Content preview |
+|------|--------|-----------|------|-----------------|
+| 1 | nist_800_53 | 0.016393 | No | AC-6 Least Privilege — AC-6(1) AUTHORIZE ACCESS TO SECURITY FUNCTIONS… |
+| 2 | nist_800_53 | 0.016393 | No | Control: Uniquely identify and authenticate organizational users… |
+| 3 | nist_800_53 | 0.016129 | No | NIST SP 800-53, REV. 5 |
+| 4 | nist_800_53 | 0.015873 | No | AC-3(9) CONTROLLED RELEASE — AC-3(10) AUDITED OVERRIDE… |
+| 5 | nist_800_53 | 0.015625 | No | AC-16(10) ATTRIBUTE CONFIGURATION — AC-17 Remote Access… |
+| 6 | fedramp_moderate_baseline | 0.015385 | No | FedRAMP SSP Appendix A: Moderate Security Controls… |
+| 7 | nist_800_53 | 0.015152 | No | NIST SP 800-53, REV. 5 |
+
+**After Cohere rerank — top 5**
+
+| Rank | Source | Rerank score | Content preview |
+|------|--------|-------------|-----------------|
+| 1 | fedramp_moderate_baseline | 0.9891 | FedRAMP SSP Appendix A: Moderate Security Controls… |
+| 2 | nist_800_53 | 0.9632 | NIST SP 800-53, REV. 5 |
+| 3 | nist_800_53 | 0.9385 | AC-6 Least Privilege — AC-6(1) AUTHORIZE ACCESS TO SECURITY FUNCTIONS… |
+| 4 | nist_800_53 | 0.3976 | Control: Uniquely identify and authenticate organizational users… |
+| 5 | nist_800_53 | 0.1395 | NIST SP 800-53, REV. 5 |
+
+**Pipeline metadata**
+
+| Field | Value |
+|-------|-------|
+| Filters | `control_family=AC` |
+| BM25 fired | No — see Findings below |
+| Post-RRF candidates | 7 of 7 passed (all ≥ 0.0150) |
+| Query enriched | No |
+| Guardrail (input/output) | NONE / none |
+| Trace ID | `a7b0410a-67c6-4798-b9dd-43d80b8338b1` |
+| Latency | 13,266ms |
+
+**Answer (summarised)**
+
+AC-6 Least Privilege requires implementing least-privilege access for system accounts.
+Key enhancements AC-6(1)–AC-6(10) cover: authorizing access to security functions,
+non-privileged access for non-security functions, network access to privileged commands,
+separate processing domains, privileged accounts, access by non-organizational users,
+review of user privileges, privilege levels for code execution, logging privileged
+function use, and prohibiting non-privileged users from executing privileged functions.
+All enhancements cited from NIST SP 800-53 Rev 5, page 457, and FedRAMP Moderate
+Baseline page 44.
+
+**Citation spot-check**
+
+| Cited section | Verified | Source |
+|---------------|----------|--------|
+| AC-6(1)–AC-6(10) enhancements | Yes | NIST SP 800-53 Rev 5, p. 457 |
+| AC-6(2) non-privileged access requirement text | Yes | FedRAMP Moderate Baseline, p. 44 |
+
+---
+
+### Example 2 — AI governance
+
+**Query:** "How does the AI RMF Govern function establish organizational accountability for AI risk?"
+
+**Retrieval — 9 candidates after RRF (no filter)**
+
+| Rank | Source | RRF Score | BM25 | Content preview |
+|------|--------|-----------|------|-----------------|
+| 1 | nist_ai_rmf | 0.032522 | Yes | GOVERN is a cross-cutting function that is infused throughout… |
+| 2 | nist_ai_rmf | 0.030835 | Yes | Table 1: Categories and subcategories for the GOVERN function… |
+| 3 | nist_ai_rmf | 0.016393 | No | AI RMF 1.0 — deployed, or evaluated – which can create opportunities… |
+| 4 | nist_ai_rmf | 0.015873 | No | AI RMF Core — Part 2: Core and Profiles… |
+| 5 | nist_ai_rmf | 0.015873 | No | Table 2: Categories and subcategories for the MAP function… |
+| 6 | nist_ai_rmf | 0.015625 | No | Executive Summary — Artificial intelligence (AI) technology… |
+| 7 | nist_ai_600_1 | 0.015625 | No | GV-1.3-004 Obtain input from stakeholder communities… |
+| 8 | nist_ai_rmf | 0.015385 | No | AI RMF 1.0 — Presenting AI system information to humans… |
+| 9 | nist_ai_rmf | 0.015152 | No | Table 1: Categories and subcategories for the GOVERN function… |
+
+**After Cohere rerank — top 5**
+
+| Rank | Source | Rerank score | Content preview |
+|------|--------|-------------|-----------------|
+| 1 | nist_ai_rmf | 0.999991 | GOVERN is a cross-cutting function that is infused throughout… |
+| 2 | nist_ai_rmf | 0.999983 | Table 1: Categories and subcategories for the GOVERN function… |
+| 3 | nist_ai_rmf | 0.999969 | Table 1: Categories and subcategories for the GOVERN function… |
+| 4 | nist_ai_rmf | 0.999962 | Presenting AI system information to humans is complex… |
+| 5 | nist_ai_rmf | 0.999952 | deployed, or evaluated — which can create opportunities… |
+
+**Pipeline metadata**
+
+| Field | Value |
+|-------|-------|
+| Filters | none |
+| BM25 fired | Yes — ranks 1 and 2 (scores 0.0325, 0.0308) |
+| Post-RRF candidates | 9 of 9 passed |
+| Query enriched | No |
+| Guardrail (input/output) | NONE / none |
+| Trace ID | `1c2f4226-63ef-46e2-94b6-7b8fe6f5dcad` |
+| Latency | 8,662ms |
+
+**Answer (summarised)**
+
+The GOVERN function establishes accountability through GOVERN 2 structures: GOVERN 2.1
+documents roles and responsibilities for AI risk management across the organization;
+GOVERN 2.2 mandates training for personnel on AI risk; GOVERN 2.3 assigns executive
+leadership responsibility for AI risk decisions. Senior leadership sets organizational
+culture for risk management. All cited from NIST AI RMF 1.0, pages 27–28.
+
+**Citation spot-check**
+
+| Cited section | Verified | Source |
+|---------------|----------|--------|
+| GOVERN 2.1 — roles and responsibilities documented | Yes | NIST AI RMF 1.0, p. 28 |
+| GOVERN 2.2 — training requirements | Yes | NIST AI RMF 1.0, p. 28 |
+| GOVERN 2.3 — executive leadership responsibility | Yes | NIST AI RMF 1.0, p. 28 |
+
+---
+
+### Example 3 — Cross-corpus synthesis
+
+**Query:** "How do FedRAMP access control requirements relate to NIST AI RMF governance expectations?"
+
+**Retrieval — 10 candidates after RRF (no filter)**
+
+| Rank | Source | RRF Score | BM25 | Content preview |
+|------|--------|-----------|------|-----------------|
+| 1 | nist_ai_rmf | 0.016393 | No | AI RMF 1.0 — deployed, or evaluated… |
+| 2 | nist_800_53 (AU) | 0.016393 | No | Discussion: In certain situations, such as when there is a threat to human life… |
+| 3 | nist_ai_rmf | 0.016129 | No | GOVERN is a cross-cutting function… |
+| 4 | nist_800_53 (PE) | 0.016129 | No | NIST SP 800-53, REV. 5 |
+| 5 | nist_ai_rmf | 0.015873 | No | Presenting AI system information to humans is complex… |
+| 6 | nist_800_53 (PE) | 0.015873 | No | PE-2 PHYSICAL ACCESS AUTHORIZATIONS… |
+| 7 | nist_ai_rmf | 0.015625 | No | valid and reliable, safe, secure and resilient, accountable… |
+| 8 | nist_800_53 (PM) | 0.015625 | No | Provide mechanisms to enable individuals to… |
+| 9 | nist_ai_rmf | 0.015385 | No | Table 1: Categories and subcategories for the GOVERN function… |
+| 10 | nist_800_53 (IA) | 0.015385 | No | their accounts. Standards and guidelines for identity assurance… |
+
+**After Cohere rerank — top 5**
+
+| Rank | Source | Rerank score | Content preview |
+|------|--------|-------------|-----------------|
+| 1 | nist_ai_rmf | 0.9906 | GOVERN is a cross-cutting function… |
+| 2 | nist_ai_rmf | 0.9477 | Table 1: Categories and subcategories for the GOVERN function… |
+| 3 | nist_ai_rmf | 0.8667 | Presenting AI system information to humans is complex… |
+| 4 | nist_ai_rmf | 0.8222 | valid and reliable, safe, secure and resilient, accountable… |
+| 5 | nist_ai_rmf | 0.7484 | deployed, or evaluated — which can create opportunities… |
+
+**Pipeline metadata**
+
+| Field | Value |
+|-------|-------|
+| Filters | none — see Findings below |
+| BM25 fired | No |
+| Post-RRF candidates | 10 of 10 passed |
+| Query enriched | No |
+| Guardrail (input/output) | NONE / none |
+| Trace ID | `0a9710f1-8fc7-42e3-9dd6-29972b2c1cf9` |
+| Latency | 8,617ms |
+
+**Answer (summarised)**
+
+The pipeline declined to answer — the retrieved context was exclusively AI RMF chunks
+with no FedRAMP access control content. The answer correctly identified that no relevant
+FedRAMP chunks were present in the context and listed what was available. This is
+accurate and expected given the retrieval result. Root cause: Presidio scrubbed
+"FedRAMP" from the query before embedding, preventing both the `impact_level=Moderate`
+filter and FedRAMP-relevant dense retrieval from firing. See Findings below.
+
+---
+
+### Negative test cases
+
+Three queries outside the corpus scope, run to verify refusal behavior.
+
+| # | Query | Top rerank score | Guardrail | Outcome | Trace |
+|---|-------|-----------------|-----------|---------|-------|
+| NEG-1 | "What does NIST 800-53 say about quantum computing key rotation schedules?" | 0.071 | none | Corpus grounding — no relevant chunks retrieved; answer cited only bibliographic references | `0a909578` |
+| NEG-2 | "How should AI systems handle cryptocurrency transaction validation under FedRAMP?" | 0.000436 | none | Corpus grounding — near-zero rerank scores; answer declined and stated topic is outside corpus | `12ea25c1` |
+| NEG-3 | "What are the NIST guidelines for blockchain smart contract auditing?" | 0.002726 | none | Corpus grounding — near-zero rerank scores; answer declined and referenced only unrelated NIST publications | `cbeb70ef` |
+
+All three refusals are driven by corpus grounding, not the Bedrock output guardrail. Rerank scores near zero confirm the retriever found no relevant content — Claude had nothing to overclaim from. The guardrail action `none` is expected and correct: these are not hallucination or overclaiming failures, they are out-of-scope queries handled by retrieval precision.
+
+---
+
+### Findings and Observations
+
+Four architectural behaviors observed during the worked examples run that were not apparent from evaluation metrics alone:
+
+**1. BM25 + metadata filter collapse (MAIN-1)**
+The `control_family=AC` SQL pre-filter reduces the BM25 candidate pool to AC-family chunks only. At 1,112 NIST 800-53 chunks this is a large sub-corpus, but the combined `WHERE tsvector_match AND control_family='AC'` condition causes tsvector to return zero rows — the matching chunks do not satisfy both conditions simultaneously at the term level. BM25 fired=False despite AC-6 being present in the query. Dense retrieval covered the gap correctly; Cohere ranked the FedRAMP AC-6 implementation chunk first (0.9891). Documented in DL-023 as an architectural finding specific to combined metadata+sparse filtering on small corpora.
+
+**2. BM25 fires on short governance queries (MAIN-2)**
+The evaluation dataset showed BM25 fired on control ID queries (NIST 800-53, FedRAMP) and not on governance queries (AI RMF, AI 600-1). MAIN-2 contradicts the second half of that observation: the 9-word governance query fired BM25 at 0.0325/0.0308. Root cause: short queries preserve "govern" as a distinctive BM25 token after stop-word stripping. Evaluation questions were 10–15 words — "govern" was one of many terms and did not anchor alone. Short Streamlit queries behave differently from long evaluation questions. Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category.
+
+**3. FedRAMP PII false positive (MAIN-3)**
+Presidio `en_core_web_lg` classifies "FedRAMP" as a PERSON entity and scrubs it from the query before embedding. The cross-corpus synthesis query ran without the `impact_level=Moderate` filter and without FedRAMP-dense embeddings, retrieving exclusively AI RMF content. The answer correctly declined rather than hallucinating an answer from irrelevant chunks. Fix: add "FedRAMP" to the Presidio allowlist in `utils/pii_filter.py`. Documented as [Planned Next] in Future Work.
+
+**4. Negative queries refused by corpus grounding, not guardrails**
+All three negative queries produced near-zero rerank scores (max 0.071, 0.000436, 0.002726) because the corpus simply does not contain quantum cryptography, cryptocurrency, or blockchain content. Claude had no relevant context to overclaim from — the answers declined and cited only what was available. Guardrail action `none` on all three is correct: this is corpus grounding working as designed. The Bedrock output guardrail is not the primary defense against out-of-scope queries — retrieval precision is.
+
+---
+
 ## System Dependencies
 
 LibreOffice is required for FedRAMP document conversion:
