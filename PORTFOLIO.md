@@ -253,6 +253,15 @@ PyMuPDF | tiktoken | Terraform
 
 ## Future Work
 
+**[Planned Next] Manual validation subset** — 5 questions with human-labeled ground
+truth to validate auto-derived Recall@k labels. Removes potential retrieval-seeding
+bias introduced by auto-labeling from the same embedding space.
+
+**[Planned Next] Role-based retrieval filtering** — `sensitivity_level` column in
+chunks table with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation
+exists in the metadata filtering layer (DL-023). Applicable when corpus includes
+controlled or sensitivity-tiered documents.
+
 **[Stretch] System profile intake** — structured intake of system impact level,
 deployment model, and data types to condition retrieval. Enables control applicability
 answers specific to a target system rather than general corpus lookup.

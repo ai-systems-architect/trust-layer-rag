@@ -1,7 +1,15 @@
 # governed-compliance-engine
 
-Governed RAG system for NIST, FISMA, and FedRAMP compliance — hybrid retrieval,
-hallucination controls, and full pipeline observability.
+Production-grade Retrieval-Augmented Generation pipeline over federal compliance
+documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP
+Moderate Baseline. The system answers compliance questions by retrieving authoritative
+source content, reranking for precision, generating grounded responses via Claude
+Sonnet 4.5 through Amazon Bedrock, and enforcing guardrails against overclaiming.
+
+Built as a compliance reference assistant — not a compliance assessment tool. The
+system retrieves and synthesizes what the frameworks require. It does not assess
+whether a specific system satisfies those requirements. That distinction is enforced
+in the system prompt and validated by Bedrock Guardrails on every response.
 
 **Portfolio:** P2 of 4 — follows [responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
 
@@ -28,6 +36,29 @@ This deployment uses a public RDS endpoint and Streamlit Community Cloud for por
 
 Full rationale for each component: [docs/decision_log.md](docs/decision_log.md)
 Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
+
+---
+
+## Why This Corpus
+
+Federal compliance work is document-intensive and terminology-precise. A compliance
+engineer asking about access control requirements needs answers grounded in the actual
+control text — not model weights trained on internet data that may be outdated or
+imprecise.
+
+Four authoritative documents were selected to cover the full federal AI compliance
+stack: NIST 800-53 for security controls, AI RMF for AI risk governance, AI 600-1
+for GenAI-specific risk, and FedRAMP Moderate for cloud authorization requirements.
+Together they represent the primary frameworks a federal AI system must navigate from
+design through ATO.
+
+| Document | Source | Chunks |
+|---|---|---|
+| NIST SP 800-53 Rev 5 | NIST | 1,112 |
+| NIST AI RMF 1.0 | NIST | 50 |
+| NIST AI 600-1 | NIST | 92 |
+| FedRAMP Moderate Baseline | FedRAMP | 442 |
+| **Total** | | **1,696** |
 
 ---
 
@@ -79,6 +110,34 @@ This pipeline adds production layers motivated by real failure modes:
 | Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
 
 Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-027).
+
+---
+
+## Retrieval Architecture — Why Hybrid
+
+**Dense retrieval (pgvector HNSW)** embeds the query and chunks independently then
+measures cosine similarity between vectors. Effective for conceptual and abstract
+queries — AI RMF governance language, risk framework concepts, cross-corpus synthesis
+questions.
+
+**Sparse retrieval (tsvector BM25)** matches on vocabulary. Effective for queries
+containing exact control identifiers — AC-6, IR-4, SC-28, CM-7. A compliance engineer
+searching for a specific control by ID gets the right chunks surfaced immediately.
+
+**RRF fusion (k=60)** combines both ranked lists: score = Σ 1/(60 + rank). The
+constant k=60 is empirically validated across information retrieval literature — it
+prevents high-ranked results from dominating while preserving rank signal.
+
+**BM25 query preprocessing:** Long natural language questions AND-chain all terms via
+plainto_tsquery, returning zero results when no single chunk contains every term
+simultaneously. Preprocessing strips stop words and limits to five key terms. Control
+identifiers (AC-6, IR-4) are regex-extracted from the original query before the
+five-term limit applies — they always occupy the leading slots as high-value BM25
+anchors. See docs/decision_log.md DL-019.
+
+**Cohere reranking:** The cross-encoder reads query and chunk together — joint inference
+via attention mechanism — producing a relevance probability rather than a geometric
+distance. Runs only on the top-10 retrieved chunks, not the full corpus.
 
 ---
 
@@ -149,21 +208,6 @@ See [docs/evaluation_methodology.md](docs/evaluation_methodology.md) for full me
 | 5 | First hybrid evaluation run invalid | All 20 evaluation queries | BM25 sparse=0 bug present during initial run — hybrid functionally identical to semantic | Resolved before final scores locked |
 
 Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failures 4 and 5 are evaluation methodology artifacts that do not affect production system quality.
-
----
-
-## Corpus
-
-Four authoritative federal sources — no synthetic data.
-
-| Source | Format | Chunks | Purpose |
-|---|---|---|---|
-| NIST SP 800-53 Rev 5 | PDF | 1,112 | Master federal security control catalog |
-| NIST AI RMF 1.0 | PDF | 50 | AI risk management — bridges to P1 portfolio project |
-| NIST AI 600-1 GenAI Profile | PDF | 92 | AI-specific risk and trustworthiness guidance |
-| FedRAMP Moderate Baseline | Word | 442 | Maps 800-53 controls to cloud authorization requirements |
-
-Total: 1,696 chunks — one-time ingestion cost ~$0.07 (OpenAI embeddings)
 
 ---
 
@@ -528,6 +572,17 @@ Cohere API round-trip accounts for ~30–50% of total query time.
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
+
+---
+
+## NIST AI RMF Alignment
+
+| Function | Implementation |
+|---|---|
+| GOVERN | System prompt enforces compliance reference boundary — no overclaiming, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-027) |
+| MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
+| MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
+| MANAGE | Guardrails block overclaiming responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
 
 ---
 
