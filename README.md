@@ -177,6 +177,15 @@ Dual guardrail architecture — input gate blocks before retrieval fires, output
 prevents overclaiming after generation. A blocked input query costs one Bedrock
 apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
+**PII Scrub** — Presidio `en_core_web_lg` scans the raw query before any external
+service call and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN,
+IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the
+generated answer before returning to the caller — catches query PII echoed in the
+response. A `_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal
+terms) and a control ID regex prevent federal acronyms and NIST identifiers (AC-2,
+IR-4) from being misclassified as PERSON entities by the NER model. See
+docs/decision_log.md DL-017.
+
 **Input Guardrail** — Bedrock Guardrails `apply_guardrail` API checks the raw query
 before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak
 patterns with no downstream token cost.
@@ -201,7 +210,10 @@ parsed, chunked, embedded, and stored in pgvector on RDS. Each chunk carries
 (FedRAMP impact, source-derived) metadata columns for pre-filter support.
 
 **Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused
-via Reciprocal Rank Fusion. Returns up to top-10 chunks.
+via Reciprocal Rank Fusion. Returns up to top-10 chunks. NIST 800-53 control
+identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's
+5-term limit is applied — control IDs always reach the sparse index as high-value
+anchor terms regardless of query length. See docs/decision_log.md DL-019.
 
 **Post-RRF Quality Gate** — Candidates below `MIN_RRF_SCORE = 0.0150` are dropped
 before Cohere sees them. RRF produces a ranked list regardless of absolute match
@@ -216,7 +228,9 @@ below that a no-op. See docs/decision_log.md DL-024.
 **Reranking** — Cohere rerank-english-v3.0 cross-encoder scores the filtered
 candidate set jointly against the query. Returns top-5.
 
-**Generation** — Claude Sonnet 4.5 via Amazon Bedrock.
+**Generation** — Claude Sonnet 4.5 via Amazon Bedrock. Response validated with
+Pydantic — `GenerateResponse` model enforces answer, model, stop_reason, and
+guardrail_action fields before the result returns to the pipeline.
 
 **Output Guardrail** — Bedrock Guardrails `guardrailConfig` on the converse call.
 Catches overclaiming, compliance status assertions, and misconduct in generated answers.
@@ -519,74 +533,65 @@ RDS is provisioned on demand — tear down when not actively building (~$2/day a
 
 ## Future Work
 
-**[Stretch] System profile intake** — structured intake of system impact level, deployment
-model, and data types to condition retrieval. Enables control applicability answers
-specific to a target system rather than general corpus lookup.
+Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-027).
 
-**[Stretch] Control checklist generation** — second LLM call post-retrieval to structure
-answers as actionable, system-specific control checklists rather than prose summaries.
+### Production Required
 
-**[Implemented] Conversational memory (retrieval-side)** — follow-up queries are
-rewritten using recent conversation context before the embedding call. Pronouns and
-vague references ("that", "it", "this approach") are resolved to their specific
-referents so the retriever embeds a fully specified query. Claude at `temperature=0.0`
-handles the rewrite deterministically; bypassed on first turn and self-contained
-queries. See docs/decision_log.md DL-025.
+**FedRAMP Presidio false positive (MAIN-3)** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
+prevents federal acronyms from being misclassified as PERSON entities. Corpus ingestion
+scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS
+Comprehend is the recommended production path when all services are within the same AWS
+account boundary. See docs/decision_log.md DL-017.
 
-Long-term memory across sessions — persisting user system profile (impact level,
-deployment model, control families reviewed) in RDS keyed by user ID — is not
-implemented. Would enable the system to answer "given your Moderate-impact SaaS
-system, here are the AC controls you still need to address" rather than answering
-generically on every session. Pairs with system profile intake future work item.
+**RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column in chunks table
+with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already exists in
+the metadata filtering layer (DL-023). Required when corpus includes controlled or
+sensitivity-tiered documents.
 
-**[Implemented] PII filtering** — Presidio scrub at query input and generated output. Corpus
-ingestion scrubbing and Langfuse trace scrubbing at source remain production-only items.
-AWS Comprehend is the recommended production path. See docs/decision_log.md DL-017.
+### Planned Next
 
-**[Implemented] Input-side query guardrail** — Bedrock Guardrails `apply_guardrail` blocks
-prompt injection, off-topic queries, and jailbreak patterns before retrieval fires.
-Dual guardrail architecture: input gate + output guardrailConfig. See docs/decision_log.md DL-022.
-
-**[Implemented] Post-RRF filter enforcement** — MIN_RRF_SCORE=0.0150 gate drops weak candidates
-before Cohere sees them. Safety floor of 3 candidates guaranteed. See docs/decision_log.md DL-024.
-
-**[Implemented] Pydantic response validation** — `GenerateResponse` model validates answer,
-model, stop_reason, and guardrail_action before returning to pipeline.
-
-**[Implemented] Control ID preservation in sparse preprocessing** — regex pre-extraction of
-control IDs (AC-2, IR-4) before the 5-term BM25 limit ensures identifiers are always
-preserved as high-value anchors. See docs/decision_log.md DL-019.
-
-**[Implemented] Presidio domain term allowlist** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
-prevents Presidio from scrubbing federal program acronyms (FedRAMP, NIST, AWS, Bedrock, FISMA,
-ATO, RMF) that `en_core_web_lg` NER misclassifies as PERSON entities. Observed on MAIN-3
-cross-corpus synthesis query. Fix: filter analyzer results by matched span before anonymization.
-See docs/decision_log.md DL-017.
-
-**[Planned Next] Manual validation subset** — 5 questions with human-labeled ground truth
-to validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
+**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to
+validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
 label generation.
 
-**[Planned Next] Role-based retrieval filtering** — `sensitivity_level` column in chunks
-table with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already
-exists in metadata filtering layer (DL-023). Applicable when corpus includes controlled
-or sensitivity-tiered documents.
+**Negative testing automation** — formalize the 5–10 unanswerable queries from Worked
+Examples into an automated suite with expected refusal outcomes and rerank score
+thresholds.
 
-**[Stretch] Structured intent extraction** — classify query intent (control lookup, gap
-assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever
-config per intent — control lookup favors BM25, synthesis favors dense.
+**Citation precision automation** — cross-reference cited section numbers against PDF page
+ranges. Currently verified manually per worked example; automation scales verification to
+the full golden dataset.
 
-**[Stretch] Query expansion / cold start** — HyDE or LLM-generated query variants to
+### Stretch
+
+**System profile intake** — structured intake of system impact level, deployment model,
+and data types to condition retrieval. Enables control applicability answers specific to
+a target system rather than general corpus lookup.
+
+**Control checklist generation** — second LLM call post-retrieval to structure answers as
+actionable, system-specific control checklists rather than prose summaries.
+
+**Structured intent extraction** — classify query intent (control lookup, gap assessment,
+cross-framework synthesis) before retrieval. Route to appropriate retriever config per
+intent — control lookup favors BM25, synthesis favors dense.
+
+**True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere
+Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
+
+**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to
 broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
-drift. Dense retrieval on short queries already performs well (MAIN-2); risk is on
-long abstract queries where no single embedding anchors to the right corpus region.
+drift.
 
-**[Stretch] Real-time faithfulness gate** — if faithfulness score falls below threshold,
-re-attempt retrieval with broader search radius before returning response. Bedrock
-Guardrails provides the current safety floor; this pattern is more appropriate for
-production agentic systems than portfolio RAG.
+**Self-correction loop** — if faithfulness score falls below threshold, re-attempt
+retrieval with broader search radius before returning response. Bedrock Guardrails
+provides the current safety floor; this pattern is more appropriate for production
+agentic systems than portfolio RAG.
 
-**[Stretch] Context entities recall** — RAGAs entity-level retrieval metric to verify key
+**Context entities recall** — RAGAs entity-level retrieval metric to verify key
 identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
-Recall@k and MRR baselines are established — entity recall is a refinement on standard
-retrieval diagnostics, not a replacement.
+Recall@k and MRR baselines are established.
+
+**Long-term conversational memory (cross-session)** — persist user system profile (impact
+level, deployment model, control families reviewed) across sessions in RDS keyed by user
+ID. Enables answers conditioned on the user's specific system rather than generic corpus
+lookup. Within-session memory implemented via DL-025.
