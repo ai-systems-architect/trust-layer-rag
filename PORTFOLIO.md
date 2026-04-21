@@ -38,6 +38,18 @@ frameworks a federal AI system must navigate from design through ATO.
 
 ---
 
+## Example Capabilities
+
+- Retrieve and explain specific NIST 800-53 controls by ID —
+  e.g. "What does AC-6 require and what are its key enhancements?"
+- Map AI RMF governance functions to implementation practices —
+  e.g. "What does the GOVERN function require of senior leadership?"
+- Detect and refuse out-of-scope queries — e.g. quantum cryptography,
+  blockchain, and cryptocurrency queries declined via corpus grounding,
+  not guardrails
+
+---
+
 ## Pipeline Architecture
 
 ```
@@ -277,6 +289,23 @@ profile in RDS keyed by user ID. Within-session pronoun enrichment is implemente
 **[Stretch] Structured intent extraction** — classify query intent (control lookup,
 gap assessment, cross-framework synthesis) before retrieval. Route to appropriate
 retriever config per intent — control lookup favors BM25, synthesis favors dense.
+
+---
+
+## Portfolio Context
+
+This project is P2 of a four-project portfolio demonstrating responsible AI system
+design across the federal AI lifecycle:
+
+| Project | Focus |
+|---|---|
+| P1 — responsible-mlops-risk-engine | Governed MLOps — model risk, fairness enforcement, ATO artifacts |
+| P2 — governed-compliance-engine (this project) | Governed RAG — retrieval precision, generation safety, compliance intelligence |
+| P3 — compliance-triage-agent (in progress) | Agentic orchestration — LangGraph, FISMA audit log triage, NIST 800-53 mapping |
+| P4 — federal-compliance-orchestrator (planned) | Multi-agent systems — planner-executor architecture, MCP |
+
+Together these projects represent a full-stack approach to secure, governed AI for
+federal and regulated environments.
 
 ---
 
