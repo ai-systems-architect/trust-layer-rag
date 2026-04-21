@@ -1,19 +1,28 @@
 # governed-compliance-engine
+## Production-Grade Governed RAG System — Federal Compliance Intelligence
 
-Production-grade Retrieval-Augmented Generation pipeline over federal compliance
-documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP
-Moderate Baseline. The system answers compliance questions by retrieving authoritative
-source content, reranking for precision, generating grounded responses via Claude
-Sonnet 4.5 through Amazon Bedrock, and enforcing guardrails against overclaiming.
+Designed for high-stakes, audit-sensitive environments where correctness,
+traceability, and controlled behavior matter more than fluency.
 
-Built as a compliance reference assistant — not a compliance assessment tool. The
-system retrieves and synthesizes what the frameworks require. It does not assess
-whether a specific system satisfies those requirements. That distinction is enforced
-in the system prompt and validated by Bedrock Guardrails on every response.
+A production-grade, governed Retrieval-Augmented Generation (RAG) system over
+federal compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI
+600-1, and FedRAMP Moderate Baseline. The system answers compliance questions by
+retrieving authoritative source content, reranking for precision, generating
+grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing
+guardrails against overclaiming.
 
-**Portfolio:** P2 of 4 — follows [responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
+Built as a **compliance reference assistant — not a compliance assessment tool.**
+The system retrieves and synthesizes what frameworks require. It does not determine
+whether a system is compliant. That boundary is enforced through system prompts and
+Bedrock Guardrails.
 
-This deployment uses a public RDS endpoint and Streamlit Community Cloud for portfolio accessibility. For regulated workloads, the production path uses private VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in [docs/architecture.md](docs/architecture.md).
+**Portfolio:** P2 of 4 — follows
+[responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
+
+This deployment uses a public RDS endpoint and Streamlit Community Cloud for
+portfolio accessibility. For regulated workloads, the production path uses private
+VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in
+[docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -62,20 +71,29 @@ design through ATO.
 
 ---
 
-## Why More Than Basic RAG
+## Production RAG Systems — Failure Modes and Architectural Controls
 
-Most RAG implementations stop at embed → retrieve → generate.
-This pipeline adds production layers motivated by real failure modes:
+Most RAG implementations stop at embed → retrieve → generate. Production systems
+fail at the edges — in retrieval quality, safety, and observability. Each component
+in this system exists because of a specific failure mode observed in real-world RAG
+systems.
 
-| Addition | Why it exists |
-|----------|---------------|
-| Hybrid retrieval (dense + BM25 + RRF) | Keyword queries fail pure semantic search |
-| Post-RRF quality gate | RRF ranks weak candidates against each other — gate stops noise reaching Cohere |
-| Cohere reranking | Bi-encoder similarity has a precision ceiling |
-| Bedrock Guardrails | Overclaiming risk is high in federal compliance context |
-| Langfuse tracing | Can't debug or improve what you can't observe |
-| RAGAs evaluation | Quantified retrieval quality against a golden dataset |
-| Provider abstraction layer | Model swappability without pipeline rewrites |
+| Failure Mode | Architectural Control |
+|---|---|
+| Keyword queries fail semantic retrieval | Hybrid retrieval (dense + BM25 + RRF) |
+| Weak candidates ranked despite low relevance | Post-RRF quality gate (MIN_RRF_SCORE=0.0150) |
+| Embedding similarity lacks precision | Cohere cross-encoder reranking |
+| Ambiguous follow-up queries degrade retrieval | Query enrichment via Bedrock Claude at temp=0.0 |
+| Model overclaims compliance status | Bedrock Guardrails — output gate |
+| Prompt injection and off-topic queries | Bedrock Guardrails — input gate before retrieval fires |
+| Sensitive data in queries and responses | PII filtering (Presidio) at input and output |
+| No visibility into system behavior | Langfuse tracing across all pipeline stages |
+| Retrieval quality not measurable | RAGAs + retrieval diagnostics (Recall@k, MRR, nDCG) |
+| Model and provider lock-in risk | Provider abstraction layer |
+| Irrelevant corpus sections retrieved | Metadata-aware filtering (control_family, impact_level) |
+
+This system is not optimized for minimal latency or simplicity. It is optimized for
+correctness, auditability, and controlled behavior in high-risk environments.
 
 ---
 
@@ -124,8 +142,8 @@ distance. Runs only on the top-10 retrieved chunks, not the full corpus.
 
 ## Evaluation Results
 
-RAGAs evaluation against a 20-question golden dataset covering all
-four corpus sources including cross-corpus synthesis questions.
+RAGAs evaluation against a 20-question architect-level golden dataset covering
+all four corpus sources including cross-corpus synthesis questions.
 
 | Metric | Semantic | Hybrid |
 |--------|----------|--------|
@@ -147,6 +165,9 @@ penalized by this metric. Additionally, architect-level multi-part
 questions fragment RAGAs synthetic question comparison. Faithfulness
 (0.90) and context precision (0.94) are the primary quality signals
 for this use case.
+
+> A slightly verbose but correct answer is acceptable.
+> An overconfident or incorrect answer is not.
 
 ### Retrieval Diagnostics
 
@@ -197,6 +218,10 @@ Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failures 4 and 5
 ```
 query → [PII Scrub] → [Input Guardrail] → [Enrich] → [Classify] → Retrieval (pre-filtered) → [Post-RRF Gate] → Reranking → Generation → [Output Guardrail] → [PII Scrub] → response
 ```
+
+Each stage is modular and independently replaceable. Retrieval strategies can change
+without affecting generation. Models can be swapped without rewriting the pipeline.
+Observability remains consistent across all components.
 
 Dual guardrail architecture — input gate blocks before retrieval fires, output gate
 prevents overclaiming after generation. A blocked input query costs one Bedrock
@@ -553,6 +578,20 @@ Cohere API round-trip accounts for ~30–50% of total query time.
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
+
+---
+
+## Deployment Boundary
+
+Corpus and vector store remain within AWS (RDS + S3). Generation occurs via Amazon
+Bedrock (Claude Sonnet 4.5). External services used:
+
+- **OpenAI** — query embedding (text-embedding-3-large)
+- **Cohere** — reranking (rerank-english-v3.0)
+- **Langfuse Cloud** — pipeline tracing (us.cloud.langfuse.com)
+
+A fully AWS-bound variant using Bedrock-native embeddings, Bedrock rerank, and
+self-hosted Langfuse is documented in [docs/architecture.md](docs/architecture.md).
 
 ---
 
