@@ -26,28 +26,6 @@ VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in
 
 ---
 
-## Architecture
-
-| Layer | Component | Tool |
-|---|---|---|
-| Ingestion | PDF + Word parsing, chunking | LibreOffice headless (.docx → PDF conversion) + PyMuPDF |
-| Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large — 1536 dims via Matryoshka truncation from 3072, retains ~99% retrieval quality, resolves pgvector HNSW 2000-dim ceiling (DL-018) |
-| Vector Store | pgvector + HNSW index | RDS PostgreSQL |
-| Query Classification | Rule-based metadata filter inference | Regex classifier in pipeline.py |
-| Retrieval | Dense + sparse fused via RRF, metadata pre-filtered | pgvector + tsvector |
-| Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
-| Tracing | Full pipeline observability | Langfuse Cloud |
-| Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
-| Guardrails | Dual gates — input (prompt injection, off-topic) + output (overclaiming) | Bedrock Guardrails |
-| Evaluation | Golden dataset scoring | RAGAs |
-| Frontend | Chat UI + debug sidebar | Streamlit |
-| Infrastructure | RDS, S3, IAM | Terraform + AWS |
-
-Full rationale for each component: [docs/decision_log.md](docs/decision_log.md)
-Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
-
----
-
 ## Why This Corpus
 
 Federal compliance work is document-intensive and terminology-precise. A compliance
@@ -97,119 +75,25 @@ correctness, auditability, and controlled behavior in high-risk environments.
 
 ---
 
-## Key Architectural Tradeoffs
+## Architecture
 
-| Decision | Chosen | Rejected | Tradeoff |
-|---|---|---|---|
-| Vector store | pgvector on RDS | Pinecone, Weaviate, Qdrant | Single AWS security boundary over managed convenience — one IAM policy, one audit trail |
-| Retrieval | Hybrid dense + BM25 + RRF | Dense-only | Control IDs (AC-6, IR-4) need exact token matching — semantic alone misses them at rank 1 |
-| Reranking | Cohere cross-encoder | Bi-encoder similarity | Joint query+chunk inference produces trained relevance judgment, not geometric distance |
-| Embedding dims | 1536 (Matryoshka truncation) | 3072 full dims | pgvector HNSW 2000-dim ceiling — retains ~99% retrieval quality at half the dimensions |
-| Generation | Claude Sonnet 4.5 via Bedrock | Direct Anthropic API | Bedrock keeps generation within AWS boundary — direct API sends chunks to external endpoint |
-| Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
+| Layer | Component | Tool |
+|---|---|---|
+| Ingestion | PDF + Word parsing, chunking | LibreOffice headless (.docx → PDF conversion) + PyMuPDF |
+| Embedding | Dense vectors (1536 dims) | OpenAI text-embedding-3-large — 1536 dims via Matryoshka truncation from 3072, retains ~99% retrieval quality, resolves pgvector HNSW 2000-dim ceiling (DL-018) |
+| Vector Store | pgvector + HNSW index | RDS PostgreSQL |
+| Query Classification | Rule-based metadata filter inference | Regex classifier in pipeline.py |
+| Retrieval | Dense + sparse fused via RRF, metadata pre-filtered | pgvector + tsvector |
+| Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
+| Tracing | Full pipeline observability | Langfuse Cloud |
+| Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
+| Guardrails | Dual gates — input (prompt injection, off-topic) + output (overclaiming) | Bedrock Guardrails |
+| Evaluation | Golden dataset scoring | RAGAs |
+| Frontend | Chat UI + debug sidebar | Streamlit |
+| Infrastructure | RDS, S3, IAM | Terraform + AWS |
 
-Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-027).
-
----
-
-## Retrieval Architecture — Why Hybrid
-
-**Dense retrieval (pgvector HNSW)** embeds the query and chunks independently then
-measures cosine similarity between vectors. Effective for conceptual and abstract
-queries — AI RMF governance language, risk framework concepts, cross-corpus synthesis
-questions.
-
-**Sparse retrieval (tsvector BM25)** matches on vocabulary. Effective for queries
-containing exact control identifiers — AC-6, IR-4, SC-28, CM-7. A compliance engineer
-searching for a specific control by ID gets the right chunks surfaced immediately.
-
-**RRF fusion (k=60)** combines both ranked lists: score = Σ 1/(60 + rank). The
-constant k=60 is empirically validated across information retrieval literature — it
-prevents high-ranked results from dominating while preserving rank signal.
-
-**BM25 query preprocessing:** Long natural language questions AND-chain all terms via
-plainto_tsquery, returning zero results when no single chunk contains every term
-simultaneously. Preprocessing strips stop words and limits to five key terms. Control
-identifiers (AC-6, IR-4) are regex-extracted from the original query before the
-five-term limit applies — they always occupy the leading slots as high-value BM25
-anchors. See docs/decision_log.md DL-019.
-
-**Cohere reranking:** The cross-encoder reads query and chunk together — joint inference
-via attention mechanism — producing a relevance probability rather than a geometric
-distance. Runs only on the top-10 retrieved chunks, not the full corpus.
-
----
-
-## Evaluation Results
-
-RAGAs evaluation against a 20-question architect-level golden dataset covering
-all four corpus sources including cross-corpus synthesis questions.
-
-| Metric | Semantic | Hybrid |
-|--------|----------|--------|
-| Faithfulness | 0.90 | 0.89 |
-| Answer Relevancy | 0.56 | 0.51 |
-| Context Precision | 0.94 | 0.95 |
-| Context Recall | 0.75 | 0.76 |
-
-Hybrid retrieval outperforms semantic on context precision, confirming
-BM25 adds signal for keyword-dominant NIST 800-53 and FedRAMP queries
-containing exact control identifiers. For AI RMF and AI 600-1 governance
-queries, dense retrieval is sufficient — governance language does not
-produce distinctive BM25 tokens.
-
-Answer relevancy scores lower than other metrics for two reasons: the
-system prompt instructs Claude to hedge and note applicability limitations
-rather than answer directly — correct behavior for federal compliance but
-penalized by this metric. Additionally, architect-level multi-part
-questions fragment RAGAs synthetic question comparison. Faithfulness
-(0.90) and context precision (0.94) are the primary quality signals
-for this use case.
-
-> A slightly verbose but correct answer is acceptable.
-> An overconfident or incorrect answer is not.
-
-### Retrieval Diagnostics
-
-Retrieval quality measured independently of generation — Recall@5, MRR,
-and nDCG across three pipeline configurations. Ground truth labels derived
-from token overlap with reference answers across a broad candidate pool.
-
-| Query Type | R@5 Semantic | R@5 Hybrid | R@5 H+Rerank | MRR Semantic | MRR Hybrid | MRR H+Rerank |
-|---|---|---|---|---|---|---|
-| Control ID (n=9) | 0.1516 | 0.1558 | 0.1558 | 1.0000 | 1.0000 | 1.0000 |
-| Governance (n=8) | 0.2099 | 0.2099 | 0.2197 | 0.8750 | 0.9375 | 0.9375 |
-| Cross-corpus (n=3) | 0.1130 | 0.1258 | 0.1258 | 0.6667 | 0.6667 | 0.6667 |
-| **Average (n=20)** | **0.1691** | **0.1729** | **0.1768** | **0.9000** | **0.9250** | **0.9250** |
-
-nDCG@5 — Semantic: 0.8883 | Hybrid: 0.9092 | Hybrid+Rerank: 0.9265
-
-The most relevant chunk surfaces at rank 1 for 90%+ of questions (MRR 0.90+).
-Recall@5 appears low (0.17) because the ground truth pool averages 28 chunks
-per question — top-5 retrieval capturing 17% of 28 labeled chunks reflects the
-large denominator, not a retrieval failure. nDCG@5 progression (0.8883 → 0.9092
-→ 0.927) confirms each pipeline layer adds ranking quality: RRF fusion improves
-governance query ranking (MRR 0.875 → 0.938), Cohere cross-encoder refines
-mid-list precision without displacing already-correct top-1 positions (MRR
-unchanged at Hybrid → H+Rerank, nDCG +0.018). Control ID queries achieve
-perfect MRR 1.00 across all configurations — exact control identifiers anchor
-both dense and BM25 retrieval reliably.
-
-See [docs/evaluation_methodology.md](docs/evaluation_methodology.md) for full metric definitions, formulas, and signal selection rationale.
-
----
-
-## Known Limitations and Failure Analysis
-
-| # | Failure type | Affected queries | Root cause | Status |
-|---|---|---|---|---|
-| 1 | BM25 sparse=0 on governance queries | AI RMF, AI 600-1 | Governance language (govern, measure, trustworthy) does not survive stop word stripping as distinctive BM25 tokens | By design — dense-only fallback is correct for abstract language |
-| 2 | Control ID truncation by 5-term BM25 limit | Any query with control ID after position 5 | `_sparse_query()` strips stop words and limits to 5 terms — AC-2 or IR-4 appearing late in query dropped | Fixed in DL-019 — regex pre-extraction implemented |
-| 3 | Answer relevancy below 0.70 target | All queries | System prompt compliance hedging penalized by RAGAs which rewards concise direct answers | Accepted — fixing requires weakening safety behavior |
-| 4 | RAGAs multi-part question fragmentation | Architect-level multi-part questions | RAGAs synthetic question generation partially overlaps original questions | Evaluation set limitation — documented in DL-020 |
-| 5 | First hybrid evaluation run invalid | All 20 evaluation queries | BM25 sparse=0 bug present during initial run — hybrid functionally identical to semantic | Resolved before final scores locked |
-
-Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failures 4 and 5 are evaluation methodology artifacts that do not affect production system quality.
+Full rationale for each component: [docs/decision_log.md](docs/decision_log.md)
+Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
 
 ---
 
@@ -287,6 +171,110 @@ Catches overclaiming, compliance status assertions, and misconduct in generated 
 
 **Evaluation** — RAGAs evaluation against a 20-question golden dataset covering all
 four corpus sources including cross-corpus synthesis questions.
+
+---
+
+## Retrieval Architecture — Why Hybrid
+
+**Dense retrieval (pgvector HNSW)** embeds the query and chunks independently then
+measures cosine similarity between vectors. Effective for conceptual and abstract
+queries — AI RMF governance language, risk framework concepts, cross-corpus synthesis
+questions.
+
+**Sparse retrieval (tsvector BM25)** matches on vocabulary. Effective for queries
+containing exact control identifiers — AC-6, IR-4, SC-28, CM-7. A compliance engineer
+searching for a specific control by ID gets the right chunks surfaced immediately.
+
+**RRF fusion (k=60)** combines both ranked lists: score = Σ 1/(60 + rank). The
+constant k=60 is empirically validated across information retrieval literature — it
+prevents high-ranked results from dominating while preserving rank signal.
+
+**BM25 query preprocessing:** Long natural language questions AND-chain all terms via
+plainto_tsquery, returning zero results when no single chunk contains every term
+simultaneously. Preprocessing strips stop words and limits to five key terms. Control
+identifiers (AC-6, IR-4) are regex-extracted from the original query before the
+five-term limit applies — they always occupy the leading slots as high-value BM25
+anchors. See docs/decision_log.md DL-019.
+
+**Cohere reranking:** The cross-encoder reads query and chunk together — joint inference
+via attention mechanism — producing a relevance probability rather than a geometric
+distance. Runs only on the top-10 retrieved chunks, not the full corpus.
+
+---
+
+## Proof of Operation
+
+Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?" Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
+
+Full pipeline exercised: input guardrail checked → classify_query inferred control_family=AC (424 of 1,696 chunks searched, 75% reduction) → hybrid retrieval (dense + BM25, sparse_query: 'AC-6 require key enhancements') → post-RRF gate passed 7 of 11 candidates → Cohere reranked 7 → 5 → Claude Sonnet 4.5 generated cited response → guardrail action: none.
+
+![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
+*Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
+
+![Retrieve span — metadata filter and hybrid retrieval detail](docs/images/trace_retrieve.png)
+*Retrieve span — enriched_query passed to hybrid retriever, control_family=AC filter applied, use_hybrid=true, 7 chunks returned post-RRF gate.*
+
+![Generate span — reranked chunks in, cited answer out](docs/images/trace_generate.png)
+*Generate span — 5 reranked chunks passed to Claude Sonnet 4.5 via Bedrock, AC-6 cited response returned, guardrail_action=none.*
+
+---
+
+## Evaluation Results
+
+RAGAs evaluation against a 20-question architect-level golden dataset covering
+all four corpus sources including cross-corpus synthesis questions.
+
+| Metric | Semantic | Hybrid |
+|--------|----------|--------|
+| Faithfulness | 0.90 | 0.89 |
+| Answer Relevancy | 0.56 | 0.51 |
+| Context Precision | 0.94 | 0.95 |
+| Context Recall | 0.75 | 0.76 |
+
+Hybrid retrieval outperforms semantic on context precision, confirming
+BM25 adds signal for keyword-dominant NIST 800-53 and FedRAMP queries
+containing exact control identifiers. For AI RMF and AI 600-1 governance
+queries, dense retrieval is sufficient — governance language does not
+produce distinctive BM25 tokens.
+
+Answer relevancy scores lower than other metrics for two reasons: the
+system prompt instructs Claude to hedge and note applicability limitations
+rather than answer directly — correct behavior for federal compliance but
+penalized by this metric. Additionally, architect-level multi-part
+questions fragment RAGAs synthetic question comparison. Faithfulness
+(0.90) and context precision (0.94) are the primary quality signals
+for this use case.
+
+> A slightly verbose but correct answer is acceptable.
+> An overconfident or incorrect answer is not.
+
+### Retrieval Diagnostics
+
+Retrieval quality measured independently of generation — Recall@5, MRR,
+and nDCG across three pipeline configurations. Ground truth labels derived
+from token overlap with reference answers across a broad candidate pool.
+
+| Query Type | R@5 Semantic | R@5 Hybrid | R@5 H+Rerank | MRR Semantic | MRR Hybrid | MRR H+Rerank |
+|---|---|---|---|---|---|---|
+| Control ID (n=9) | 0.1516 | 0.1558 | 0.1558 | 1.0000 | 1.0000 | 1.0000 |
+| Governance (n=8) | 0.2099 | 0.2099 | 0.2197 | 0.8750 | 0.9375 | 0.9375 |
+| Cross-corpus (n=3) | 0.1130 | 0.1258 | 0.1258 | 0.6667 | 0.6667 | 0.6667 |
+| **Average (n=20)** | **0.1691** | **0.1729** | **0.1768** | **0.9000** | **0.9250** | **0.9250** |
+
+nDCG@5 — Semantic: 0.8883 | Hybrid: 0.9092 | Hybrid+Rerank: 0.9265
+
+The most relevant chunk surfaces at rank 1 for 90%+ of questions (MRR 0.90+).
+Recall@5 appears low (0.17) because the ground truth pool averages 28 chunks
+per question — top-5 retrieval capturing 17% of 28 labeled chunks reflects the
+large denominator, not a retrieval failure. nDCG@5 progression (0.8883 → 0.9092
+→ 0.927) confirms each pipeline layer adds ranking quality: RRF fusion improves
+governance query ranking (MRR 0.875 → 0.938), Cohere cross-encoder refines
+mid-list precision without displacing already-correct top-1 positions (MRR
+unchanged at Hybrid → H+Rerank, nDCG +0.018). Control ID queries achieve
+perfect MRR 1.00 across all configurations — exact control identifiers anchor
+both dense and BM25 retrieval reliably.
+
+See [docs/evaluation_methodology.md](docs/evaluation_methodology.md) for full metric definitions, formulas, and signal selection rationale.
 
 ---
 
@@ -498,6 +486,127 @@ All three negative queries produced near-zero rerank scores (max 0.071, 0.000436
 
 ---
 
+## Key Architectural Tradeoffs
+
+| Decision | Chosen | Rejected | Tradeoff |
+|---|---|---|---|
+| Vector store | pgvector on RDS | Pinecone, Weaviate, Qdrant | Single AWS security boundary over managed convenience — one IAM policy, one audit trail |
+| Retrieval | Hybrid dense + BM25 + RRF | Dense-only | Control IDs (AC-6, IR-4) need exact token matching — semantic alone misses them at rank 1 |
+| Reranking | Cohere cross-encoder | Bi-encoder similarity | Joint query+chunk inference produces trained relevance judgment, not geometric distance |
+| Embedding dims | 1536 (Matryoshka truncation) | 3072 full dims | pgvector HNSW 2000-dim ceiling — retains ~99% retrieval quality at half the dimensions |
+| Generation | Claude Sonnet 4.5 via Bedrock | Direct Anthropic API | Bedrock keeps generation within AWS boundary — direct API sends chunks to external endpoint |
+| Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
+
+Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-027).
+
+---
+
+## Known Limitations and Failure Analysis
+
+| # | Failure type | Affected queries | Root cause | Status |
+|---|---|---|---|---|
+| 1 | BM25 sparse=0 on governance queries | AI RMF, AI 600-1 | Governance language (govern, measure, trustworthy) does not survive stop word stripping as distinctive BM25 tokens | By design — dense-only fallback is correct for abstract language |
+| 2 | Control ID truncation by 5-term BM25 limit | Any query with control ID after position 5 | `_sparse_query()` strips stop words and limits to 5 terms — AC-2 or IR-4 appearing late in query dropped | Fixed in DL-019 — regex pre-extraction implemented |
+| 3 | Answer relevancy below 0.70 target | All queries | System prompt compliance hedging penalized by RAGAs which rewards concise direct answers | Accepted — fixing requires weakening safety behavior |
+| 4 | RAGAs multi-part question fragmentation | Architect-level multi-part questions | RAGAs synthetic question generation partially overlaps original questions | Evaluation set limitation — documented in DL-020 |
+| 5 | First hybrid evaluation run invalid | All 20 evaluation queries | BM25 sparse=0 bug present during initial run — hybrid functionally identical to semantic | Resolved before final scores locked |
+
+Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failures 4 and 5 are evaluation methodology artifacts that do not affect production system quality.
+
+---
+
+## NIST AI RMF Alignment
+
+| Function | Implementation |
+|---|---|
+| GOVERN | System prompt enforces compliance reference boundary — no overclaiming, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-027) |
+| MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
+| MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
+| MANAGE | Guardrails block overclaiming responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
+
+---
+
+## Deployment Boundary
+
+Corpus and vector store remain within AWS (RDS + S3). Generation occurs via Amazon
+Bedrock (Claude Sonnet 4.5). External services used:
+
+- **OpenAI** — query embedding (text-embedding-3-large)
+- **Cohere** — reranking (rerank-english-v3.0)
+- **Langfuse Cloud** — pipeline tracing (us.cloud.langfuse.com)
+
+A fully AWS-bound variant using Bedrock-native embeddings, Bedrock rerank, and
+self-hosted Langfuse is documented in [docs/architecture.md](docs/architecture.md).
+
+---
+
+## Future Work
+
+Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-027).
+
+### Production Required
+
+**FedRAMP Presidio false positive (MAIN-3)** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
+prevents federal acronyms from being misclassified as PERSON entities. Corpus ingestion
+scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS
+Comprehend is the recommended production path when all services are within the same AWS
+account boundary. See docs/decision_log.md DL-017.
+
+**RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column in chunks table
+with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already exists in
+the metadata filtering layer (DL-023). Required when corpus includes controlled or
+sensitivity-tiered documents.
+
+### Planned Next
+
+**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to
+validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
+label generation.
+
+**Negative testing automation** — formalize the 5–10 unanswerable queries from Worked
+Examples into an automated suite with expected refusal outcomes and rerank score
+thresholds.
+
+**Citation precision automation** — cross-reference cited section numbers against PDF page
+ranges. Currently verified manually per worked example; automation scales verification to
+the full golden dataset.
+
+### Stretch
+
+**System profile intake** — structured intake of system impact level, deployment model,
+and data types to condition retrieval. Enables control applicability answers specific to
+a target system rather than general corpus lookup.
+
+**Control checklist generation** — second LLM call post-retrieval to structure answers as
+actionable, system-specific control checklists rather than prose summaries.
+
+**Structured intent extraction** — classify query intent (control lookup, gap assessment,
+cross-framework synthesis) before retrieval. Route to appropriate retriever config per
+intent — control lookup favors BM25, synthesis favors dense.
+
+**True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere
+Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
+
+**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to
+broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
+drift.
+
+**Self-correction loop** — if faithfulness score falls below threshold, re-attempt
+retrieval with broader search radius before returning response. Bedrock Guardrails
+provides the current safety floor; this pattern is more appropriate for production
+agentic systems than portfolio RAG.
+
+**Context entities recall** — RAGAs entity-level retrieval metric to verify key
+identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
+Recall@k and MRR baselines are established.
+
+**Long-term conversational memory (cross-session)** — persist user system profile (impact
+level, deployment model, control families reviewed) across sessions in RDS keyed by user
+ID. Enables answers conditioned on the user's specific system rather than generic corpus
+lookup. Within-session memory implemented via DL-025.
+
+---
+
 ## System Dependencies
 
 LibreOffice is required for FedRAMP document conversion:
@@ -578,112 +687,3 @@ Cohere API round-trip accounts for ~30–50% of total query time.
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
-
----
-
-## Deployment Boundary
-
-Corpus and vector store remain within AWS (RDS + S3). Generation occurs via Amazon
-Bedrock (Claude Sonnet 4.5). External services used:
-
-- **OpenAI** — query embedding (text-embedding-3-large)
-- **Cohere** — reranking (rerank-english-v3.0)
-- **Langfuse Cloud** — pipeline tracing (us.cloud.langfuse.com)
-
-A fully AWS-bound variant using Bedrock-native embeddings, Bedrock rerank, and
-self-hosted Langfuse is documented in [docs/architecture.md](docs/architecture.md).
-
----
-
-## NIST AI RMF Alignment
-
-| Function | Implementation |
-|---|---|
-| GOVERN | System prompt enforces compliance reference boundary — no overclaiming, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-027) |
-| MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
-| MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
-| MANAGE | Guardrails block overclaiming responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
-
----
-
-## Future Work
-
-Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-027).
-
-### Production Required
-
-**FedRAMP Presidio false positive (MAIN-3)** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
-prevents federal acronyms from being misclassified as PERSON entities. Corpus ingestion
-scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS
-Comprehend is the recommended production path when all services are within the same AWS
-account boundary. See docs/decision_log.md DL-017.
-
-**RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column in chunks table
-with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already exists in
-the metadata filtering layer (DL-023). Required when corpus includes controlled or
-sensitivity-tiered documents.
-
-### Planned Next
-
-**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to
-validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
-label generation.
-
-**Negative testing automation** — formalize the 5–10 unanswerable queries from Worked
-Examples into an automated suite with expected refusal outcomes and rerank score
-thresholds.
-
-**Citation precision automation** — cross-reference cited section numbers against PDF page
-ranges. Currently verified manually per worked example; automation scales verification to
-the full golden dataset.
-
-### Stretch
-
-**System profile intake** — structured intake of system impact level, deployment model,
-and data types to condition retrieval. Enables control applicability answers specific to
-a target system rather than general corpus lookup.
-
-**Control checklist generation** — second LLM call post-retrieval to structure answers as
-actionable, system-specific control checklists rather than prose summaries.
-
-**Structured intent extraction** — classify query intent (control lookup, gap assessment,
-cross-framework synthesis) before retrieval. Route to appropriate retriever config per
-intent — control lookup favors BM25, synthesis favors dense.
-
-**True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere
-Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
-
-**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to
-broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
-drift.
-
-**Self-correction loop** — if faithfulness score falls below threshold, re-attempt
-retrieval with broader search radius before returning response. Bedrock Guardrails
-provides the current safety floor; this pattern is more appropriate for production
-agentic systems than portfolio RAG.
-
-**Context entities recall** — RAGAs entity-level retrieval metric to verify key
-identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
-Recall@k and MRR baselines are established.
-
-**Long-term conversational memory (cross-session)** — persist user system profile (impact
-level, deployment model, control families reviewed) across sessions in RDS keyed by user
-ID. Enables answers conditioned on the user's specific system rather than generic corpus
-lookup. Within-session memory implemented via DL-025.
-
----
-
-## Proof of Operation
-
-Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?" Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
-
-Full pipeline exercised: input guardrail checked → classify_query inferred control_family=AC (424 of 1,696 chunks searched, 75% reduction) → hybrid retrieval (dense + BM25, sparse_query: 'AC-6 require key enhancements') → post-RRF gate passed 7 of 11 candidates → Cohere reranked 7 → 5 → Claude Sonnet 4.5 generated cited response → guardrail action: none.
-
-![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
-*Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
-
-![Retrieve span — metadata filter and hybrid retrieval detail](docs/images/trace_retrieve.png)
-*Retrieve span — enriched_query passed to hybrid retriever, control_family=AC filter applied, use_hybrid=true, 7 chunks returned post-RRF gate.*
-
-![Generate span — reranked chunks in, cited answer out](docs/images/trace_generate.png)
-*Generate span — 5 reranked chunks passed to Claude Sonnet 4.5 via Bedrock, AC-6 cited response returned, guardrail_action=none.*
