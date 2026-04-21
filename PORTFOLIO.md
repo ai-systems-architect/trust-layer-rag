@@ -290,25 +290,6 @@ profile in RDS keyed by user ID. Within-session pronoun enrichment is implemente
 gap assessment, cross-framework synthesis) before retrieval. Route to appropriate
 retriever config per intent — control lookup favors BM25, synthesis favors dense.
 
----
-
-## Portfolio Context
-
-This project is P2 of a four-project portfolio demonstrating responsible AI system
-design across the federal AI lifecycle:
-
-| Project | Focus |
-|---|---|
-| P1 — responsible-mlops-risk-engine | Governed MLOps — model risk, fairness enforcement, ATO artifacts |
-| P2 — governed-compliance-engine (this project) | Governed RAG — retrieval precision, generation safety, compliance intelligence |
-| P3 — compliance-triage-agent (in progress) | Agentic orchestration — LangGraph, FISMA audit log triage, NIST 800-53 mapping |
-| P4 — federal-compliance-orchestrator (planned) | Multi-agent systems — planner-executor architecture, MCP |
-
-Together these projects represent a full-stack approach to secure, governed AI for
-federal and regulated environments.
-
----
-
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
 NIST AI RMF aligned. DL-001 through DL-027.*
