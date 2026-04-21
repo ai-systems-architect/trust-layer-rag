@@ -482,17 +482,27 @@ All three refusals are driven by corpus grounding, not the Bedrock output guardr
 
 Four architectural behaviors observed during the worked examples run that were not apparent from evaluation metrics alone:
 
-**1. BM25 + metadata filter collapse (MAIN-1)**
-The `control_family=AC` SQL pre-filter reduces the corpus from 1,696 to 424 chunks before retrieval. The combined `WHERE tsvector_match AND control_family='AC'` condition causes tsvector to return zero rows on this filtered subset — BM25 fired=False despite AC-6 being present in the query. Dense retrieval covered the gap; Cohere ranked the FedRAMP AC-6 implementation chunk first (0.9891). Production fix: run sparse and dense legs separately, apply metadata filter to dense leg only, fuse post-filter. Documented in DL-027.
+#### 1. BM25 + metadata filter collapse (MAIN-1)
+- **What:** BM25 fired=False despite AC-6 being present in the query
+- **Root cause:** `WHERE tsvector_match AND control_family='AC'` — combining BM25 and the SQL pre-filter causes tsvector to return zero rows on the filtered subset
+- **Outcome:** Dense retrieval covered the gap; Cohere ranked the FedRAMP AC-6 chunk first (0.9891)
+- **Fix:** Run sparse and dense legs separately; apply metadata filter to dense leg only, fuse post-filter. See DL-027.
 
-**2. BM25 fires on short governance queries (MAIN-2)**
-The evaluation dataset showed BM25 fired on control ID queries (NIST 800-53, FedRAMP) and not on governance queries (AI RMF, AI 600-1). MAIN-2 contradicts the second half of that observation: the 9-word governance query fired BM25 at 0.0325/0.0308. Root cause: short queries preserve "govern" as a distinctive BM25 token after stop-word stripping. Evaluation questions were 10–15 words — "govern" was one of many terms and did not anchor alone. Short Streamlit queries behave differently from long evaluation questions. Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category.
+#### 2. BM25 fires on short governance queries (MAIN-2)
+- **What:** 9-word governance query fired BM25 at 0.0325/0.0308 — contradicts the evaluation finding that BM25 does not fire on AI RMF queries
+- **Root cause:** Short queries preserve "govern" as a distinctive BM25 token after stop-word stripping; evaluation questions were 10–15 words where "govern" was one of many terms and did not anchor alone
+- **Outcome:** Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category; short Streamlit queries behave differently from long evaluation questions
 
-**3. FedRAMP PII false positive (MAIN-3)**
-Presidio `en_core_web_lg` classifies "FedRAMP" as a PERSON entity and scrubs it from the query before embedding. The cross-corpus synthesis query ran without the `impact_level=Moderate` filter and without FedRAMP-dense embeddings, retrieving exclusively AI RMF content. The answer correctly declined rather than hallucinating an answer from irrelevant chunks. Fix implemented: `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents FedRAMP, NIST, AWS, Bedrock, FISMA, ATO, and RMF from being scrubbed. See docs/decision_log.md DL-017.
+#### 3. FedRAMP PII false positive (MAIN-3)
+- **What:** Query ran without the `impact_level=Moderate` filter; retrieved exclusively AI RMF content instead of FedRAMP chunks
+- **Root cause:** Presidio `en_core_web_lg` classified "FedRAMP" as a PERSON entity and scrubbed it before embedding
+- **Outcome:** Answer correctly declined rather than hallucinating from irrelevant chunks
+- **Fix:** `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents FedRAMP, NIST, AWS, Bedrock, FISMA, ATO, and RMF from being scrubbed. See DL-017.
 
-**4. Negative queries refused by corpus grounding, not guardrails**
-All three negative queries produced near-zero rerank scores (max 0.071, 0.000436, 0.002726) because the corpus simply does not contain quantum cryptography, cryptocurrency, or blockchain content. Claude had no relevant context to overclaim from — the answers declined and cited only what was available. Guardrail action `none` on all three is correct: this is corpus grounding working as designed. The Bedrock output guardrail is not the primary defense against out-of-scope queries — retrieval precision is.
+#### 4. Negative queries refused by corpus grounding, not guardrails
+- **What:** All three negative queries declined correctly; guardrail action=none on all three
+- **Root cause:** Corpus does not contain quantum cryptography, cryptocurrency, or blockchain content — rerank scores near zero (max 0.071, 0.000436, 0.002726)
+- **Outcome:** Retrieval precision is the primary defense against out-of-scope queries; the Bedrock output guardrail is not needed when the retriever finds nothing to overclaim from
 
 ---
 
