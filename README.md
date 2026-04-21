@@ -62,25 +62,6 @@ design through ATO.
 
 ---
 
-## Proof of Operation
-
-Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?" Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
-
-Full pipeline exercised: input guardrail checked → classify_query inferred control_family=AC (424 of 1,696 chunks searched, 75% reduction) → hybrid retrieval (dense + BM25, sparse_query: 'AC-6 require key enhancements') → post-RRF gate passed 7 of 11 candidates → Cohere reranked 7 → 5 → Claude Sonnet 4.5 generated cited response → guardrail action: none.
-
-![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
-*Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
-
-![Retrieve span — metadata filter and hybrid retrieval detail](docs/images/trace_retrieve.png)
-*Retrieve span — enriched_query passed to hybrid retriever, control_family=AC filter applied, use_hybrid=true, 7 chunks returned post-RRF gate.*
-
-![Generate span — reranked chunks in, cited answer out](docs/images/trace_generate.png)
-*Generate span — 5 reranked chunks passed to Claude Sonnet 4.5 via Bedrock, AC-6 cited response returned, guardrail_action=none.*
-
-Full worked examples across three query types — AC-6 control lookup, AI RMF governance, and cross-corpus synthesis — plus three negative unanswerable queries documented in the [Worked Examples](#worked-examples) section below.
-
----
-
 ## Why More Than Basic RAG
 
 Most RAG implementations stop at embed → retrieve → generate.
@@ -650,3 +631,20 @@ Recall@k and MRR baselines are established.
 level, deployment model, control families reviewed) across sessions in RDS keyed by user
 ID. Enables answers conditioned on the user's specific system rather than generic corpus
 lookup. Within-session memory implemented via DL-025.
+
+---
+
+## Proof of Operation
+
+Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?" Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
+
+Full pipeline exercised: input guardrail checked → classify_query inferred control_family=AC (424 of 1,696 chunks searched, 75% reduction) → hybrid retrieval (dense + BM25, sparse_query: 'AC-6 require key enhancements') → post-RRF gate passed 7 of 11 candidates → Cohere reranked 7 → 5 → Claude Sonnet 4.5 generated cited response → guardrail action: none.
+
+![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
+*Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
+
+![Retrieve span — metadata filter and hybrid retrieval detail](docs/images/trace_retrieve.png)
+*Retrieve span — enriched_query passed to hybrid retriever, control_family=AC filter applied, use_hybrid=true, 7 chunks returned post-RRF gate.*
+
+![Generate span — reranked chunks in, cited answer out](docs/images/trace_generate.png)
+*Generate span — 5 reranked chunks passed to Claude Sonnet 4.5 via Bedrock, AC-6 cited response returned, guardrail_action=none.*
