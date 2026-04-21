@@ -111,66 +111,76 @@ Dual guardrail architecture — input gate blocks before retrieval fires, output
 prevents overclaiming after generation. A blocked input query costs one Bedrock
 apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
-**PII Scrub** — Presidio `en_core_web_lg` scans the raw query before any external
-service call and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN,
-IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the
-generated answer before returning to the caller — catches query PII echoed in the
-response. A `_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal
-terms) and a control ID regex prevent federal acronyms and NIST identifiers (AC-2,
-IR-4) from being misclassified as PERSON entities by the NER model. See
-docs/decision_log.md DL-017.
+### PII Scrub
+Presidio `en_core_web_lg` scans the raw query before any external service call and
+replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others)
+with bracketed type placeholders. A second pass runs on the generated answer before
+returning to the caller — catches query PII echoed in the response. A
+`_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a
+control ID regex prevent federal acronyms and NIST identifiers (AC-2, IR-4) from
+being misclassified as PERSON entities by the NER model. See docs/decision_log.md DL-017.
 
-**Input Guardrail** — Bedrock Guardrails `apply_guardrail` API checks the raw query
-before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak
-patterns with no downstream token cost.
+### Input Guardrail
+Bedrock Guardrails `apply_guardrail` API checks the raw query before any retrieval
+runs. Blocks prompt injection, off-topic queries, and jailbreak patterns with no
+downstream token cost.
 
-**Query Enrichment** — Resolves pronouns and ambiguous references in follow-up queries
-using recent conversation context before the embedding call. "How does that relate to
-least privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?"
-— the retriever embeds a fully specified query. Claude via Bedrock at `temperature=0.0`
+### Query Enrichment
+Resolves pronouns and ambiguous references in follow-up queries using recent
+conversation context before the embedding call. "How does that relate to least
+privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?" —
+the retriever embeds a fully specified query. Claude via Bedrock at `temperature=0.0`
 rewrites the query deterministically. Bypassed on first turn, long queries (8+ words),
 and queries with no ambiguous pronouns — adds ~150ms only on triggered queries.
 Rewrite visible in app UI and Langfuse trace. See docs/decision_log.md DL-025.
 
-**Classify** — Rule-based query classifier infers metadata pre-filters from the
-enriched query text. Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4)
-resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to
-an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger
+### Classify
+Rule-based query classifier infers metadata pre-filters from the enriched query text.
+Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4) resolve to a
+`control_family` filter; queries mentioning FedRAMP Moderate resolve to an
+`impact_level` filter. Runs on the enriched query so resolved control IDs trigger
 the filter even when the original query used a pronoun. See docs/decision_log.md DL-023.
 
-**Ingestion** — NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents
-parsed, chunked, embedded, and stored in pgvector on RDS. Each chunk carries
-`control_family` (NIST 800-53 family prefix, extracted from text) and `impact_level`
-(FedRAMP impact, source-derived) metadata columns for pre-filter support.
+### Ingestion
+NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents parsed, chunked,
+embedded, and stored in pgvector on RDS. Each chunk carries `control_family` (NIST
+800-53 family prefix, extracted from text) and `impact_level` (FedRAMP impact,
+source-derived) metadata columns for pre-filter support.
 
-**Retrieval** — Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused
-via Reciprocal Rank Fusion. Returns up to top-10 chunks. NIST 800-53 control
-identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's
-5-term limit is applied — control IDs always reach the sparse index as high-value
-anchor terms regardless of query length. See docs/decision_log.md DL-019.
+### Retrieval
+Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal
+Rank Fusion. Returns up to top-10 chunks. NIST 800-53 control identifiers (AC-2,
+IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is
+applied — control IDs always reach the sparse index as high-value anchor terms
+regardless of query length. See docs/decision_log.md DL-019.
 
-**Post-RRF Quality Gate** — Candidates below `MIN_RRF_SCORE = 0.0150` are dropped
-before Cohere sees them. RRF produces a ranked list regardless of absolute match
-quality — the gate stops weak candidates from consuming rerank quota. Safety floor
-of 3 candidates guaranteed. Threshold derived from empirical score distribution
-across 7 representative query types: 6–10 candidates pass per query, average 8.1
-of 10; safety floor triggered on 0 of 7 queries. Threshold 0.0150 was set from
-first principles — the commonly cited 0.008 does not apply when k=60, because the
-theoretical minimum RRF score with top_k=10 is 1/(60+10) = 0.0143, making anything
-below that a no-op. See docs/decision_log.md DL-024.
+### Post-RRF Quality Gate
+Candidates below `MIN_RRF_SCORE = 0.0150` are dropped before Cohere sees them. RRF
+produces a ranked list regardless of absolute match quality — the gate stops weak
+candidates from consuming rerank quota. Safety floor of 3 candidates guaranteed.
+Threshold derived from empirical score distribution across 7 representative query
+types: 6–10 candidates pass per query, average 8.1 of 10; safety floor triggered on
+0 of 7 queries. Threshold 0.0150 was set from first principles — the commonly cited
+0.008 does not apply when k=60, because the theoretical minimum RRF score with
+top_k=10 is 1/(60+10) = 0.0143, making anything below that a no-op. See
+docs/decision_log.md DL-024.
 
-**Reranking** — Cohere rerank-english-v3.0 cross-encoder scores the filtered
-candidate set jointly against the query. Returns top-5.
+### Reranking
+Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly
+against the query. Returns top-5.
 
-**Generation** — Claude Sonnet 4.5 via Amazon Bedrock. Response validated with
-Pydantic — `GenerateResponse` model enforces answer, model, stop_reason, and
-guardrail_action fields before the result returns to the pipeline.
+### Generation
+Claude Sonnet 4.5 via Amazon Bedrock. Response validated with Pydantic —
+`GenerateResponse` model enforces answer, model, stop_reason, and guardrail_action
+fields before the result returns to the pipeline.
 
-**Output Guardrail** — Bedrock Guardrails `guardrailConfig` on the converse call.
-Catches overclaiming, compliance status assertions, and misconduct in generated answers.
+### Output Guardrail
+Bedrock Guardrails `guardrailConfig` on the converse call. Catches overclaiming,
+compliance status assertions, and misconduct in generated answers.
 
-**Evaluation** — RAGAs evaluation against a 20-question golden dataset covering all
-four corpus sources including cross-corpus synthesis questions.
+### Evaluation
+RAGAs evaluation against a 20-question golden dataset covering all four corpus
+sources including cross-corpus synthesis questions.
 
 ---
 
