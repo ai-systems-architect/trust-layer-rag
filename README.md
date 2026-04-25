@@ -62,7 +62,7 @@ systems.
 | Weak candidates ranked despite low relevance | Post-RRF quality gate (MIN_RRF_SCORE=0.0150) |
 | Embedding similarity lacks precision | Cohere cross-encoder reranking |
 | Ambiguous follow-up queries degrade retrieval | Query enrichment via Bedrock Claude at temp=0.0 |
-| Model overclaims compliance status | Bedrock Guardrails — output gate |
+| Model overclaims beyond retrieved context | Bedrock Guardrails — output gate |
 | Prompt injection and off-topic queries | Bedrock Guardrails — input gate before retrieval fires |
 | Sensitive data in queries and responses | PII filtering (Presidio) at input and output |
 | No visibility into system behavior | Langfuse tracing across all pipeline stages |
