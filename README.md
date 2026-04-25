@@ -102,7 +102,7 @@ Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
 ## Pipeline
 
 ![Governed RAG architecture — offline ingestion pipeline, shared infrastructure, online query pipeline](docs/images/governed_rag_architecture.png)
-*Full system architecture — offline ingestion, shared infrastructure, online query pipeline. NIST AI RMF 1.0 aligned.*
+*Full system architecture — offline ingestion, shared infrastructure, online query pipeline.*
 
 Each stage is modular and independently replaceable. Retrieval strategies can change
 without affecting generation. Models can be swapped without rewriting the pipeline.
