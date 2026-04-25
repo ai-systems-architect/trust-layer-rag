@@ -1,6 +1,8 @@
 # The Trust Layer for Federal Compliance AI
 ## Production-grade governed RAG system for federal compliance corpora
 
+> Independent portfolio project demonstrating production-grade governed RAG architecture for federal compliance corpora. Built on public-domain US Government frameworks (NIST 800-53, NIST AI RMF 1.0, NIST AI 600-1, FedRAMP Moderate). Not affiliated with or endorsed by any agency, contractor, or commercial vendor. Views are the author's own.
+
 Designed for high-stakes, audit-sensitive environments where correctness,
 traceability, and controlled behavior matter more than fluency.
 
@@ -706,3 +708,18 @@ Cohere API round-trip accounts for ~30–50% of total query time.
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE).
+
+Copyright (c) 2026 Raghunath Devayajanam.
+
+This project ingests US Government public-domain compliance frameworks
+(NIST 800-53, NIST AI RMF 1.0, NIST AI 600-1, FedRAMP Moderate). Those
+documents are works of the US Government and are not subject to copyright
+protection in the United States (17 U.S.C. § 105). They are included to
+demonstrate retrieval-augmented generation over federal compliance corpora.
+No US Government endorsement is implied.
