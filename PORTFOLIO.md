@@ -1,5 +1,5 @@
 # The Trust Layer for Federal Compliance AI
-## Production-grade governed RAG system aligned with NIST AI RMF 1.0
+## Production-grade governed RAG system for federal compliance corpora
 
 **Raghunath Devayajanam**
 GitHub: https://github.com/ai-systems-architect/governed-compliance-engine
@@ -295,4 +295,4 @@ retriever config per intent — control lookup favors BM25, synthesis favors den
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
-NIST AI RMF aligned. DL-001 through DL-027.*
+Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-027.*
