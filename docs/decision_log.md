@@ -1,4 +1,4 @@
-# Decision Log — governed-compliance-engine
+# Decision Log — The Trust Layer for Federal Compliance AI
 
 All architectural decisions recorded here. Format: decision made, rationale,
 alternatives evaluated. Referenced from config.py via DL-XXX pointers.

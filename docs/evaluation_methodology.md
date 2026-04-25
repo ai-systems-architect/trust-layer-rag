@@ -1,4 +1,4 @@
-# Evaluation Methodology — governed-compliance-engine
+# Evaluation Methodology — The Trust Layer for Federal Compliance AI
 
 Two independent evaluation layers assess different concerns:
 

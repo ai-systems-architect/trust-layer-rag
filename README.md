@@ -1,5 +1,5 @@
-# governed-compliance-engine
-## Production-Grade Governed RAG System — Federal Compliance Intelligence
+# The Trust Layer for Federal Compliance AI
+## Production-grade governed RAG system aligned with NIST AI RMF 1.0
 
 Designed for high-stakes, audit-sensitive environments where correctness,
 traceability, and controlled behavior matter more than fluency.

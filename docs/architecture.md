@@ -1,4 +1,4 @@
-# Architecture — governed-compliance-engine
+# Architecture — The Trust Layer for Federal Compliance AI
 
 High-level system design. For why each component was chosen over alternatives,
 see docs/decision_log.md.
