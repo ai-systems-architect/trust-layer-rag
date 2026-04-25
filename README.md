@@ -58,17 +58,17 @@ systems.
 
 | Failure Mode | Architectural Control |
 |---|---|
+| Sensitive data in queries and responses | PII filtering (Presidio) at input and output |
+| Prompt injection and off-topic queries | Bedrock Guardrails — input gate before retrieval fires |
+| Ambiguous follow-up queries degrade retrieval | Query enrichment via Bedrock Claude at temp=0.0 |
+| Irrelevant corpus sections retrieved | Metadata-aware filtering (control_family, impact_level) |
 | Keyword queries fail semantic retrieval | Hybrid retrieval (dense + BM25 + RRF) |
 | Weak candidates ranked despite low relevance | Post-RRF quality gate (MIN_RRF_SCORE=0.0150) |
 | Embedding similarity lacks precision | Cohere cross-encoder reranking |
-| Ambiguous follow-up queries degrade retrieval | Query enrichment via Bedrock Claude at temp=0.0 |
 | Model overclaims beyond retrieved context | Bedrock Guardrails — output gate |
-| Prompt injection and off-topic queries | Bedrock Guardrails — input gate before retrieval fires |
-| Sensitive data in queries and responses | PII filtering (Presidio) at input and output |
 | No visibility into system behavior | Langfuse tracing across all pipeline stages |
 | Retrieval quality not measurable | RAGAs + retrieval diagnostics (Recall@k, MRR, nDCG) |
-| Model and provider lock-in risk | Provider abstraction layer |
-| Irrelevant corpus sections retrieved | Metadata-aware filtering (control_family, impact_level) |
+| Model and provider lock-in risk | Embedding and generation providers swappable via environment variable |
 
 This system is not optimized for minimal latency or simplicity. It is optimized for
 correctness, auditability, and controlled behavior in high-risk environments.
