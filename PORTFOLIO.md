@@ -21,6 +21,9 @@ It does not assess whether a specific system satisfies those requirements.
 That distinction is enforced in the system prompt and validated by
 Bedrock Guardrails on every response.
 
+![Governed RAG architecture](docs/images/governed_rag_architecture.png)
+*Governed RAG architecture — three-pipeline view with governance, observability, and security boundaries marked.*
+
 ---
 
 ## Why This Corpus

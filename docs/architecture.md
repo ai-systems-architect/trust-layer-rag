@@ -17,6 +17,13 @@ end-to-end in Langfuse Cloud.
 
 ---
 
+## System Architecture
+
+![Governed RAG architecture — three-pipeline view](images/governed_rag_architecture.png)
+*System architecture overview — see ASCII pipeline diagrams below for per-stage decision log references.*
+
+---
+
 ## Pipeline
 
 ### Ingestion (one-time)
