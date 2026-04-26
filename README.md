@@ -713,7 +713,7 @@ RDS is provisioned on demand — tear down when not actively building (~$2/day a
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+MIT License — see [LICENSE](LICENSE.md).
 
 Copyright (c) 2026 Raghunath Devayajanam.
 
