@@ -71,6 +71,42 @@ For a federal compliance RAG system, the failure mode hierarchy is:
 This ordering drives metric priority. Faithfulness and context precision are the
 gates — context recall and answer relevancy are secondary quality signals.
 
+### Why Answer Correctness was not measured
+
+RAGAs ships an Answer Correctness metric that compares the generated answer
+to a reference answer using LLM-as-judge. It is deliberately excluded from
+this evaluation for two reasons.
+
+First, for a federal compliance corpus, the source-of-truth is the corpus
+itself, not the evaluator's reference answer. The reference answers in the
+golden dataset were synthesized for chunk-labeling purposes (Option A token
+Jaccard overlap with retrieved candidates) — they are useful as ground
+truth for retrieval evaluation but treating them as the canonical correct
+response assumes a single right answer exists. NIST text often supports
+multiple defensible interpretations of the same control. Faithfulness
+(does the answer match the retrieved chunks?) is a stronger correctness
+signal than reference-match (does the answer match the answer the
+evaluator wrote?) because it measures grounding in authoritative source
+material rather than grounding in the evaluator's prior expectation.
+
+Second, RAGAs Answer Correctness is LLM-as-judge over two free-text
+answers — a noisy, expensive metric that the RAGAs documentation itself
+flags as less reliable than the retrieval-grounded metrics. Faithfulness
+(0.90 / 0.89), Context Precision (0.94 / 0.95), and Context Recall
+(0.75 / 0.76) collectively cover what a reliable Correctness metric
+would measure for a governed-domain RAG system: that the answer is
+grounded in retrieved chunks, that the retrieved chunks are relevant,
+and that the retrieval covered enough of the corpus to support the
+answer. Adding Answer Correctness on top of these would not change
+which architectural decisions are defensible — it would add cost
+without adding signal.
+
+Equivalent metric in standard RAG evaluation tutorials (e.g., LangSmith's
+four-metric framework — Correctness / Relevance / Groundedness /
+Retrieval Relevance) is therefore mapped to Faithfulness in this
+evaluation. Three of the four LangSmith metrics map directly onto RAGAs
+metrics measured here; the fourth is replaced by the stronger signal.
+
 ---
 
 ## Part 2 — Retrieval Diagnostics
@@ -223,3 +259,4 @@ python evaluation/retrieval_diagnostics.py
 - DL-019 — BM25 sparse query preprocessing
 - DL-020 — RAGAs results analysis and failure modes
 - DL-021 — This document registered as standalone evaluation reference
+- DL-028 — Answer Correctness deliberately excluded from evaluation

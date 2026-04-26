@@ -1292,3 +1292,56 @@ Run dense and sparse retrieval as separate queries. Apply the metadata filter on
 At 1,696 chunks and with dense-only fallback producing correct top-1 results (FedRAMP chunk, Cohere score 0.9891), the quality impact is negligible. The fix adds retrieval complexity — two independent query paths instead of one — that is not warranted at this corpus scale.
 
 **Related:** DL-023 (metadata-aware retrieval), DL-019 (BM25 sparse preprocessing), DL-008 (hybrid retrieval architecture)
+
+---
+
+## DL-028 — Answer Correctness deliberately excluded from evaluation
+**Date:** 2026-04-26
+**Status:** Accepted
+
+**Decision:** RAGAs Answer Correctness metric is deliberately excluded
+from the evaluation set. The evaluation reports Faithfulness, Context
+Precision, Context Recall, and Answer Relevancy only.
+
+**Rationale:**
+1. Source-of-truth for a federal compliance RAG system is the ingested
+   corpus (NIST 800-53, AI RMF, AI 600-1, FedRAMP), not the evaluator's
+   reference answer. Faithfulness against the corpus is a stronger
+   correctness signal than reference-match against a synthesized answer.
+2. NIST control text often supports multiple defensible interpretations.
+   A single reference answer cannot capture this; LLM-judged
+   reference-match would penalize valid alternative phrasings.
+3. RAGAs Answer Correctness is LLM-as-judge over two free-text answers —
+   noisy and expensive. The RAGAs documentation itself ranks it below
+   the retrieval-grounded metrics for reliability.
+4. Reference answers in the golden dataset were synthesized for chunk
+   labeling (Option A token Jaccard overlap), not as canonical responses.
+   Repurposing them as correctness ground truth would conflate two
+   distinct evaluation roles.
+
+**Mapping to standard RAG evaluation frameworks:** LangSmith's
+four-metric framework (Correctness / Relevance / Groundedness /
+Retrieval Relevance) maps onto this evaluation as Faithfulness
+(replaces Correctness as the stronger signal) / Answer Relevancy
+(Relevance) / Faithfulness (Groundedness) / Context Precision
+(Retrieval Relevance).
+
+**Alternatives considered:**
+- Add RAGAs Answer Correctness to the existing metric set — rejected for
+  noise and redundancy with Faithfulness.
+- Manual scoring of response-vs-reference for the 20-question golden
+  dataset — rejected as not architecturally informative; would add a
+  quality assurance signal but would not change which architectural
+  decisions are defensible.
+
+**Consequences:**
+- Evaluation methodology document gains a "Why Answer Correctness was
+  not measured" subsection (preempts reviewer questions).
+- Future evaluation runs do not need to include this metric.
+- If a downstream consumer of this codebase requires Answer Correctness
+  scoring (e.g., for a customer-facing product where reference-match is
+  the relevant quality signal), the metric can be enabled by adding
+  `answer_correctness` to the RAGAs metric list — no architectural
+  change required.
+
+**Related:** DL-009 (RAGAs evaluation design and golden dataset), DL-020 (RAGAs results analysis and failure modes), DL-021 (evaluation methodology document)
