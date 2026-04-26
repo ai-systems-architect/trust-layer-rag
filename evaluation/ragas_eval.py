@@ -8,7 +8,7 @@ Cost note: 20 questions x 2 modes = 40 Claude generation calls + 40 OpenAI
 embed calls + RAGAs own LLM calls for scoring. Run once after pipeline is
 validated. Estimated cost: ~$2-4 USD total.
 
-see docs/decision_log.md DL-009
+see docs/decision_log.md DL-009, DL-028
 """
 import json
 import logging

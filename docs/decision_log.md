@@ -307,6 +307,8 @@ README to show iteration.
 - Context Recall — is retrieval finding all relevant chunks
 - Answer Relevancy — is the answer relevant to the question
 
+**See also:** DL-028 — Answer Correctness deliberately excluded from metric set
+
 ---
 
 ## DL-010 — Orchestration Framework
