@@ -219,8 +219,13 @@ Questions are grouped by type to show where each retrieval configuration adds va
 
 nDCG@5 — Semantic: 0.8883 | Hybrid: 0.9092 | Hybrid+Rerank: 0.9265
 
-nDCG@5 is computed per-question and summarized as a single average row —
-it does not segment cleanly by query type at this dataset size.
+nDCG@5 is reported as a single average across all 20 questions rather than
+broken out by query type. nDCG's logarithmic rank-position weighting makes
+it more sensitive to small sample sizes than Recall@5 or MRR — at n=3 for
+cross-corpus and n=8–9 for the other types, segment-level nDCG numbers
+would reflect which specific questions landed in each segment more than
+genuine retrieval-configuration differences. The dataset-wide average is
+the honest reporting unit for this metric at this scale.
 
 ### Interpretation guide
 
