@@ -13,7 +13,7 @@ compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI
 600-1, and FedRAMP Moderate Baseline. The system answers compliance
 questions by retrieving authoritative source content, reranking for
 precision, generating grounded responses via Claude Sonnet 4.5 through
-Amazon Bedrock, and enforcing guardrails against overclaiming.
+Amazon Bedrock, and enforcing guardrails against compliance determinations and unsupported claims.
 
 Built as a compliance reference assistant — not a compliance assessment
 tool. The system retrieves and synthesizes what the frameworks require.
@@ -117,7 +117,7 @@ additional layer here exists because of a specific production failure mode.
 | Post-RRF quality gate | RRF ranks weak candidates against each other regardless of absolute score — gate (MIN_RRF_SCORE=0.0150) stops noise reaching Cohere |
 | Hybrid retrieval — dense + BM25 + RRF | Keyword queries fail pure semantic search — control identifiers like AC-6 and IR-4 are high-value BM25 targets |
 | Cohere cross-encoder reranking | Bi-encoder similarity has a precision ceiling — cross-encoder sees query and chunk together, producing a trained relevance judgment |
-| Bedrock Guardrails (dual — input + output) | Overclaiming risk is high in federal compliance — input gate blocks before retrieval fires, output gate catches generation overclaiming |
+| Bedrock Guardrails (dual — input + output) | Compliance assertion risk is high in federal contexts — input gate blocks before retrieval fires, output gate catches compliance determinations in generated responses |
 | Langfuse Cloud tracing | Cannot debug or improve what cannot be observed — every retrieval, rerank, and generation call traced end-to-end |
 | RAGAs evaluation against golden dataset | Quantified retrieval quality, not subjective assessment — semantic vs hybrid comparison produces a defensible result |
 | Provider abstraction layer | Embedding and generation models swappable via environment variables without pipeline rewrites |
@@ -220,10 +220,10 @@ Full rationale with alternatives evaluated in `docs/decision_log.md`
 
 | Function | Implementation |
 |---|---|
-| GOVERN | System prompt enforces compliance reference boundary — no overclaiming, Bedrock Guardrails enforcement, decision log documents all architectural choices |
+| GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices |
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
-| MANAGE | Guardrails block overclaiming responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
+| MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
 
 ---
 
@@ -268,30 +268,37 @@ PyMuPDF | tiktoken | Terraform
 
 ## Future Work
 
-**[Planned Next] Manual validation subset** — 5 questions with human-labeled ground
-truth to validate auto-derived Recall@k labels. Removes potential retrieval-seeding
-bias introduced by auto-labeling from the same embedding space.
+### Production Required
 
-**[Planned Next] Role-based retrieval filtering** — `sensitivity_level` column in
-chunks table with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation
-exists in the metadata filtering layer (DL-023). Applicable when corpus includes
-controlled or sensitivity-tiered documents.
+**Presidio production hardening** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents federal acronyms from misclassification. Corpus ingestion scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS Comprehend is the recommended production path. See decision_log DL-017.
 
-**[Stretch] System profile intake** — structured intake of system impact level,
-deployment model, and data types to condition retrieval. Enables control applicability
-answers specific to a target system rather than general corpus lookup.
+**RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation exists in metadata filtering layer (DL-023). Required when corpus includes controlled or sensitivity-tiered documents.
 
-**[Stretch] Control checklist generation** — second LLM call post-retrieval to
-structure answers as actionable, system-specific control checklists rather than prose
-summaries.
+### Planned Next
 
-**[Stretch] Long-term conversational memory (cross-session)** — persist user system
-profile in RDS keyed by user ID. Within-session pronoun enrichment is implemented
-(DL-025). Cross-session persistence is the remaining gap.
+**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from auto-labeling.
 
-**[Stretch] Structured intent extraction** — classify query intent (control lookup,
-gap assessment, cross-framework synthesis) before retrieval. Route to appropriate
-retriever config per intent — control lookup favors BM25, synthesis favors dense.
+**Negative testing automation** — formalize unanswerable queries from Worked Examples into an automated suite with expected refusal outcomes and rerank score thresholds.
+
+**Citation precision automation** — cross-reference cited section numbers against PDF page ranges. Currently manual per worked example; automation scales verification to the full golden dataset.
+
+### Stretch
+
+**System profile intake** — structured intake of system impact level, deployment model, and data types to condition retrieval. Enables system-specific control applicability answers.
+
+**Control checklist generation** — second LLM call post-retrieval to structure answers as actionable control checklists rather than prose summaries.
+
+**Structured intent extraction** — classify query intent (control lookup, gap assessment, cross-framework synthesis) before retrieval. Route to retriever config per intent.
+
+**True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere Embed via Bedrock to keep all data within AWS at ingestion time.
+
+**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to broaden retrieval on abstract governance queries.
+
+**Self-correction loop** — if faithfulness falls below threshold, re-attempt retrieval with broader search radius before returning response.
+
+**Context entities recall** — RAGAs entity-level retrieval metric to verify key identifiers (MAP-1.1, AC-2) are not dropped during retrieval.
+
+**Long-term conversational memory (cross-session)** — persist user system profile across sessions in RDS keyed by user ID. Within-session pronoun enrichment implemented via DL-025; cross-session persistence is the remaining gap.
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
