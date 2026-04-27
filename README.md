@@ -171,14 +171,15 @@ docs/decision_log.md DL-024.
 Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly
 against the query. Returns top-5.
 
-### Generation
-Claude Sonnet 4.5 via Amazon Bedrock. Response validated with Pydantic —
-`GenerateResponse` model enforces answer, model, stop_reason, and guardrail_action
-fields before the result returns to the pipeline.
+### Generation with Output Guardrail
+Claude Sonnet 4.5 via Amazon Bedrock. Generation and output guardrail run in a
+single `converse()` call with `guardrailConfig` attached — Bedrock generates the
+response and applies the guardrail in one operation. The guardrail catches
+overclaiming beyond retrieved context, compliance status assertions, and misconduct.
 
-### Output Guardrail
-Bedrock Guardrails `guardrailConfig` on the converse call. Catches overclaiming,
-compliance status assertions, and misconduct in generated answers.
+The combined Bedrock response is validated with Pydantic — `GenerateResponse` model
+enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before the
+result returns to the pipeline.
 
 ### Evaluation
 RAGAs evaluation against a 20-question golden dataset covering all four corpus
