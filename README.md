@@ -182,8 +182,12 @@ enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before 
 result returns to the pipeline.
 
 ### Evaluation
-RAGAs evaluation against a 20-question golden dataset covering all four corpus
-sources including cross-corpus synthesis questions.
+RAGAs evaluation and retrieval diagnostics run offline against a 20-question golden
+dataset covering all four corpus sources including cross-corpus synthesis questions.
+RAGAs scores answer quality (Faithfulness, Context Precision, Context Recall, Answer
+Relevancy); retrieval diagnostics score retrieval in isolation (Recall@k, MRR, nDCG
+across semantic, hybrid, and hybrid+rerank configurations). Full methodology in
+`docs/evaluation_methodology.md`.
 
 ---
 
