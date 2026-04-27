@@ -1,4 +1,5 @@
 # The Trust Layer for Federal Compliance AI
+![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=governed-compliance-engine&countColor=%23263759)
 ## Production-grade governed RAG system for federal compliance corpora
 
 > Independent portfolio project demonstrating production-grade governed RAG architecture for federal compliance corpora. Built on public-domain US Government frameworks (NIST 800-53, NIST AI RMF 1.0, NIST AI 600-1, FedRAMP Moderate). Not affiliated with or endorsed by any agency, contractor, or commercial vendor. Views are the author's own.
