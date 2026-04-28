@@ -590,9 +590,11 @@ sensitivity-tiered documents.
 
 ### Planned Next
 
-**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to
-validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
-label generation.
+**Manual chunk-relevance labeling on a 5-question sample** — chunk-level relevance labels
+in the golden dataset are auto-derived via Jaccard overlap with reference answers (Option A
+in evaluation_methodology.md). A human-labeled sample would validate this and quantify any
+seeding bias. Reference answers themselves are already human-written — this addresses the
+chunk-level labels specifically.
 
 **Citation precision automation** — cross-reference cited section numbers against PDF page
 ranges. Currently verified manually per worked example; automation scales verification to
@@ -602,14 +604,16 @@ the full golden dataset.
 
 **System profile intake** — structured intake of system impact level, deployment model,
 and data types to condition retrieval. Enables control applicability answers specific to
-a target system rather than general corpus lookup.
+a target system rather than general corpus lookup. Per-session input — see Long-term
+conversational memory below for the cross-session persistence variant.
 
 **Control checklist generation** — second LLM call post-retrieval to structure answers as
 actionable, system-specific control checklists rather than prose summaries.
 
 **Structured intent extraction** — classify query intent (control lookup, gap assessment,
 cross-framework synthesis) before retrieval. Route to appropriate retriever config per
-intent — control lookup favors BM25, synthesis favors dense.
+intent — control ID lookup favors BM25 (evidence in retrieval diagnostics by query type);
+other intents may benefit from different retriever configurations, to be validated empirically.
 
 **True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere
 Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
@@ -618,19 +622,22 @@ Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
 broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
 drift.
 
-**Self-correction loop** — if faithfulness score falls below threshold, re-attempt
-retrieval with broader search radius before returning response. Bedrock Guardrails
-provides the current safety floor; this pattern is more appropriate for production
-agentic systems than portfolio RAG.
-
 **Context entities recall** — RAGAs entity-level retrieval metric to verify key
 identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
 Recall@k and MRR baselines are established.
 
 **Long-term conversational memory (cross-session)** — persist user system profile (impact
 level, deployment model, control families reviewed) across sessions in RDS keyed by user
-ID. Enables answers conditioned on the user's specific system rather than generic corpus
-lookup. Within-session memory implemented via DL-025.
+ID. Builds on System profile intake to extend it across sessions. Within-session memory
+implemented via DL-025.
+
+### Considered and Deferred
+
+**Self-correction loop** — re-attempt retrieval with broader search radius when faithfulness
+scores fall below threshold. Evaluated and deferred for this system: the dual-guardrail
+design provides the safety floor, and the re-attempt pattern is more appropriate for
+production agentic systems where retrieval-time decisions feed into multi-step workflows.
+Reconsider when this codebase extends to agentic patterns (P3, P4).
 
 ---
 

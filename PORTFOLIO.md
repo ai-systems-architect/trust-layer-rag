@@ -273,33 +273,37 @@ PyMuPDF | tiktoken | Terraform
 
 ### Production Required
 
-**Presidio production path** — PII filtering implemented at query input and generated output; Langfuse traces receive pre-scrubbed content. Corpus ingestion scrubbing hook exists but is not wired into the ingestion pipeline — deferred because the current corpus (public NIST documents) contains no PII. Required when corpus expands to SSPs or assessment reports. AWS Comprehend is the recommended managed replacement for Presidio in a full production AWS deployment. See decision_log DL-017.
+**Presidio production hardening** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents federal acronyms from misclassification. Corpus ingestion scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS Comprehend is the recommended production path. See decision_log DL-017.
 
 **RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation exists in metadata filtering layer (DL-023). Required when corpus includes controlled or sensitivity-tiered documents.
 
 ### Planned Next
 
-**Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from auto-labeling.
+**Manual chunk-relevance labeling on a 5-question sample** — chunk-level relevance labels in the golden dataset are auto-derived via Jaccard overlap with reference answers (Option A in evaluation_methodology.md). A human-labeled sample would validate this and quantify any seeding bias. Reference answers themselves are already human-written — this addresses the chunk-level labels specifically.
+
+**Negative testing automation** — formalize unanswerable queries from Worked Examples into an automated suite with expected refusal outcomes and rerank score thresholds.
 
 **Citation precision automation** — cross-reference cited section numbers against PDF page ranges. Currently manual per worked example; automation scales verification to the full golden dataset.
 
 ### Stretch
 
-**System profile intake** — structured intake of system impact level, deployment model, and data types to condition retrieval. Enables system-specific control applicability answers.
+**System profile intake** — structured intake of system impact level, deployment model, and data types to condition retrieval. Enables system-specific control applicability answers. Per-session input — see Long-term conversational memory below for the cross-session persistence variant.
 
-**Control checklist generation** — second LLM call post-retrieval to structure answers as actionable control checklists rather than prose summaries.
+**Control checklist generation** — second LLM call post-retrieval to structure answers as actionable control checklists rather than prose summaries. Builds on System profile intake.
 
-**Structured intent extraction** — classify query intent (control lookup, gap assessment, cross-framework synthesis) before retrieval. Route to retriever config per intent.
+**Structured intent extraction** — classify query intent (control lookup, gap assessment, cross-framework synthesis) before retrieval. Route to appropriate retriever config per intent — control ID lookup favors BM25 (evidence in retrieval diagnostics); other intents may benefit from different retriever configurations, to be validated empirically.
 
 **True AWS-boundary variant** — replace OpenAI embeddings with Amazon Titan or Cohere Embed via Bedrock to keep all data within AWS at ingestion time.
 
-**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to broaden retrieval on abstract governance queries.
+**Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic drift.
 
-**Self-correction loop** — if faithfulness falls below threshold, re-attempt retrieval with broader search radius before returning response.
+**Context entities recall** — RAGAs entity-level retrieval metric to verify key identifiers (MAP-1.1, AC-2) are not dropped during retrieval. Defer until Recall@k and MRR baselines are established.
 
-**Context entities recall** — RAGAs entity-level retrieval metric to verify key identifiers (MAP-1.1, AC-2) are not dropped during retrieval.
+**Long-term conversational memory (cross-session)** — persist user system profile (impact level, deployment model, control families reviewed) across sessions in RDS keyed by user ID. Builds on System profile intake to extend it across sessions. Within-session memory implemented via DL-025.
 
-**Long-term conversational memory (cross-session)** — persist user system profile across sessions in RDS keyed by user ID. Within-session pronoun enrichment implemented via DL-025; cross-session persistence is the remaining gap.
+### Considered and Deferred
+
+**Self-correction loop** — re-attempt retrieval with broader search radius when faithfulness scores fall below threshold. Evaluated and deferred for this system: the dual-guardrail design provides the safety floor, and the re-attempt pattern is more appropriate for production agentic systems where retrieval-time decisions feed into multi-step workflows. Reconsider when this codebase extends to agentic patterns.
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
