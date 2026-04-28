@@ -95,6 +95,9 @@ other component — both retrievers return identical output shape.
   reference answers across all four corpus sources
 - `evaluation/ragas_eval.py` — RAGAs evaluation, semantic vs hybrid
   comparison, results saved to data/ragas_results.json
+- `evaluation/guardrail_test.py` — adversarial evaluation against five
+  negative test cases; two-signal pass detection (hard guardrail block
+  or hedge phrase in generated answer)
 
 **Pipeline and UI**
 - `pipeline.py` — full orchestrator: PII scrub → input guardrail → query enrichment → classify → retrieve → rerank → generate

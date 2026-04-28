@@ -1,13 +1,15 @@
 # Evaluation Methodology — The Trust Layer for Federal Compliance AI
 
-Two independent evaluation layers assess different concerns:
+Three independent evaluation layers assess different concerns:
 
 - **RAGAs evaluation** — measures end-to-end answer quality after generation
 - **Retrieval diagnostics** — measures retrieval quality before generation runs
+- **Adversarial guardrail evaluation** — verifies correct refusal behavior on out-of-scope and unanswerable queries; implemented in `evaluation/guardrail_test.py`
 
 These are separate questions. A retriever can surface the right chunks while the
-generator still produces a poorly-grounded answer, and vice versa. Both layers
-are needed for a complete picture.
+generator still produces a poorly-grounded answer; both can perform well while the
+system still fails to refuse out-of-scope queries correctly. All three layers are
+needed for a complete picture.
 
 ---
 

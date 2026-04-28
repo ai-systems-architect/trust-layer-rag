@@ -182,12 +182,15 @@ enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before 
 result returns to the pipeline.
 
 ### Evaluation
-RAGAs evaluation and retrieval diagnostics run offline against a 20-question golden
-dataset covering all four corpus sources including cross-corpus synthesis questions.
+Three independent evaluation layers run offline against the golden dataset:
+
 RAGAs scores answer quality (Faithfulness, Context Precision, Context Recall, Answer
-Relevancy); retrieval diagnostics score retrieval in isolation (Recall@k, MRR, nDCG
-across semantic, hybrid, and hybrid+rerank configurations). Full methodology in
-`docs/evaluation_methodology.md`.
+Relevancy) across semantic and hybrid retrieval configurations. Retrieval diagnostics
+score retrieval in isolation (Recall@k, MRR, nDCG across semantic, hybrid, and
+hybrid+rerank). Adversarial guardrail evaluation (`evaluation/guardrail_test.py`) runs
+the five negative test cases through the full pipeline and verifies correct refusal
+behavior — two-signal pass detection: hard guardrail block or hedge phrase in the
+generated answer. Full methodology in `docs/evaluation_methodology.md`.
 
 ---
 
