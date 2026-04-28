@@ -7,6 +7,8 @@
 Designed for high-stakes, audit-sensitive environments where correctness,
 traceability, and controlled behavior matter more than fluency.
 
+> 📄 **AI Impact Assessment** — A federal-style governance artifact accompanies this project. The [AIIA (PDF)](docs/AIIA_FCIS_v1_0.pdf) maps RAG-specific risks (hallucination, overclaiming, retrieval integrity, PII leakage to traces) to implemented controls and evidence, following NIST AI RMF 1.0, EO 13960, and OMB M-21-06 patterns. Sample artifact — fictional sponsoring agency.
+
 A production-grade, governed Retrieval-Augmented Generation (RAG) system over
 federal compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI
 600-1, and FedRAMP Moderate Baseline. The system answers compliance questions by
@@ -97,6 +99,7 @@ correctness, auditability, and controlled behavior in high-risk environments.
 
 Full rationale for each component: [docs/decision_log.md](docs/decision_log.md)
 Cloud equivalents (GCP, Azure): [docs/architecture.md](docs/architecture.md)
+AI Impact Assessment (governance artifact): [docs/AIIA_FCIS_v1_0.pdf](docs/AIIA_FCIS_v1_0.pdf)
 
 ---
 
