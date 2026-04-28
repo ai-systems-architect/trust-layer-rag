@@ -622,9 +622,12 @@ Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
 broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
 drift.
 
-**Context entities recall** — RAGAs entity-level retrieval metric to verify key
-identifiers such as MAP-1.1 or AC-2 are not dropped during retrieval. Defer until
-Recall@k and MRR baselines are established.
+**Context entities recall** — RAGAs metric that checks whether specific identifiers
+from the reference answer (AC-2, MAP-1.1) appear inside the retrieved chunk text.
+Complementary to Recall@k: Recall@k confirms the right chunk IDs were retrieved;
+entity recall confirms those chunks actually contain the control identifiers the
+answer needs. Catches the failure mode where retrieval is semantically close but the
+specific identifier is missing from the returned text.
 
 **Long-term conversational memory (cross-session)** — persist user system profile (impact
 level, deployment model, control families reviewed) across sessions in RDS keyed by user
