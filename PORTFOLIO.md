@@ -305,6 +305,8 @@ PyMuPDF | tiktoken | Terraform
 
 **Self-correction loop** — re-attempt retrieval with broader search radius when faithfulness scores fall below threshold. Evaluated and deferred for this system: the dual-guardrail design provides the safety floor, and the re-attempt pattern is more appropriate for production agentic systems where retrieval-time decisions feed into multi-step workflows.
 
+---
+
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
 Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-027.*
