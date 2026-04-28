@@ -685,22 +685,28 @@ export PYTHONPATH=.
 
 | Stage | Typical Latency | Notes |
 |---|---|---|
+| PII scrub (input) | ~5–15ms | Presidio en_core_web_lg, local |
+| Input guardrail | ~100–300ms | Bedrock Guardrails |
+| Query enrichment | ~100–250ms | Bedrock Claude, only when triggered |
 | Embed query | ~50–100ms | OpenAI API |
 | Dense retrieval | ~20–50ms | pgvector HNSW |
 | Sparse retrieval | ~10–30ms | PostgreSQL tsvector |
-| Rerank | ~200–400ms | Cohere API — dominant latency |
-| Generation | ~1000–3000ms | Bedrock Claude Sonnet |
-| **Total end-to-end** | **~1.5–4s** | |
+| Rerank | ~150–300ms | Cohere API |
+| Generation (incl. output guardrail) | ~7000–12000ms | Bedrock Claude Sonnet 4.5 with guardrailConfig — multi-paragraph cited responses dominate |
+| PII scrub (output) | ~5–15ms | Presidio, local |
+| **Total end-to-end** | **~8–13s** | Generation is ~90% of total — see Worked Examples for measured values |
 
 | Component | Cost Per Query |
 |---|---|
 | OpenAI embedding | ~$0.00013 |
 | Cohere rerank | ~$0.001 |
-| Bedrock Claude Sonnet | ~$0.003–0.015 (varies by output length) |
-| **Approximate total** | **~$0.004–0.016** |
+| Bedrock Claude Sonnet 4.5 | ~$0.005–0.025 (varies by output length) |
+| Bedrock Guardrails (input + output) | ~$0.0015 |
+| **Approximate total** | **~$0.008–0.028** |
 
-Langfuse traces confirm these ranges. Reranking is the dominant latency stage —
-Cohere API round-trip accounts for ~30–50% of total query time.
+Langfuse traces confirm these ranges. Generation dominates at ~90% of total query time — a multi-paragraph cited compliance response through `converse()` with `guardrailConfig` attached is doing more work than a typical chat response: five reranked chunks passed as context, citation-enforced system prompt, and guardrail evaluation in the same call.
+
+This is expected and acceptable. This system is optimized for correctness, grounding, and auditability — not minimal latency. That tradeoff is stated explicitly in the [opening section of this README](#production-rag-systems--failure-modes-and-architectural-controls). For a compliance reference assistant where a wrong answer has real consequences, 8–13s for a grounded, cited, guardrail-checked response is the right operating point.
 
 ---
 
