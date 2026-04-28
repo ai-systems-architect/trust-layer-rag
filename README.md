@@ -432,51 +432,59 @@ culture for risk management. All cited from NIST AI RMF 1.0, pages 27–28.
 
 **Query:** "How do FedRAMP access control requirements relate to NIST AI RMF governance expectations?"
 
-**Retrieval — 10 candidates after RRF (no filter)**
+**Retrieval — 7 candidates after RRF (no filter)**
 
 | Rank | Source | RRF Score | BM25 | Content preview |
 |------|--------|-----------|------|-----------------|
-| 1 | nist_ai_rmf | 0.016393 | No | AI RMF 1.0 — deployed, or evaluated… |
-| 2 | nist_800_53 (AU) | 0.016393 | No | Discussion: In certain situations, such as when there is a threat to human life… |
-| 3 | nist_ai_rmf | 0.016129 | No | GOVERN is a cross-cutting function… |
-| 4 | nist_800_53 (PE) | 0.016129 | No | NIST SP 800-53, REV. 5 |
-| 5 | nist_ai_rmf | 0.015873 | No | Presenting AI system information to humans is complex… |
-| 6 | nist_800_53 (PE) | 0.015873 | No | PE-2 PHYSICAL ACCESS AUTHORIZATIONS… |
-| 7 | nist_ai_rmf | 0.015625 | No | valid and reliable, safe, secure and resilient, accountable… |
-| 8 | nist_800_53 (PM) | 0.015625 | No | Provide mechanisms to enable individuals to… |
-| 9 | nist_ai_rmf | 0.015385 | No | Table 1: Categories and subcategories for the GOVERN function… |
-| 10 | nist_800_53 (IA) | 0.015385 | No | their accounts. Standards and guidelines for identity assurance… |
+| 1 | nist_ai_rmf | 0.016393 | No | GOVERN is a cross-cutting function that is infused throughout… |
+| 2 | fedramp_moderate_baseline (SR) | 0.016393 | No | Appendix A: Moderate FedRAMP Security Controls — SR (supply chain)… |
+| 3 | nist_ai_rmf | 0.016129 | No | valid and reliable, safe, secure and resilient, accountable… |
+| 4 | nist_ai_rmf | 0.015873 | No | deployed, or evaluated — which can create opportunities… |
+| 5 | fedramp_moderate_baseline (AC) | 0.015625 | No | Appendix A: Moderate FedRAMP Security Controls — AC-1 policy… |
+| 6 | fedramp_moderate_baseline (AC) | 0.015385 | No | Appendix A: Moderate FedRAMP Security Controls — AC-1 procedures… |
+| 7 | nist_ai_rmf | 0.015152 | No | AI RMF cross-sectoral profiles cover risks of models or… |
 
 **After Cohere rerank — top 5**
 
 | Rank | Source | Rerank score | Content preview |
 |------|--------|-------------|-----------------|
-| 1 | nist_ai_rmf | 0.9906 | GOVERN is a cross-cutting function… |
-| 2 | nist_ai_rmf | 0.9477 | Table 1: Categories and subcategories for the GOVERN function… |
-| 3 | nist_ai_rmf | 0.8667 | Presenting AI system information to humans is complex… |
-| 4 | nist_ai_rmf | 0.8222 | valid and reliable, safe, secure and resilient, accountable… |
-| 5 | nist_ai_rmf | 0.7484 | deployed, or evaluated — which can create opportunities… |
+| 1 | nist_ai_rmf | 0.9843 | GOVERN is a cross-cutting function that is infused throughout… |
+| 2 | nist_ai_rmf | 0.8218 | valid and reliable, safe, secure and resilient, accountable… |
+| 3 | nist_ai_rmf | 0.7127 | deployed, or evaluated — which can create opportunities… |
+| 4 | fedramp_moderate_baseline (AC) | 0.6878 | Appendix A: Moderate FedRAMP Security Controls — AC-1 policy… |
+| 5 | fedramp_moderate_baseline (AC) | 0.6812 | Appendix A: Moderate FedRAMP Security Controls — AC-1 procedures… |
 
 **Pipeline metadata**
 
 | Field | Value |
 |-------|-------|
 | Filters | none — see Findings below |
-| BM25 fired | No |
-| Post-RRF candidates | 10 of 10 passed |
+| BM25 fired | No (sparse leg returned 1 candidate but no chunk's combined RRF score crossed the BM25-dominant threshold) |
+| Post-RRF candidates | 7 of 11 passed gate (threshold=0.0150) |
 | Query enriched | No |
 | Guardrail (input/output) | NONE / none |
-| Trace ID | `0a9710f1-8fc7-42e3-9dd6-29972b2c1cf9` |
-| Latency | 8,617ms |
+| Trace ID | `e0ba6da3-78dd-4e7a-aabc-70c5bf639b69` |
+| Latency | 11,515ms |
 
 **Answer (summarised)**
 
-The pipeline declined to answer — the retrieved context was exclusively AI RMF chunks
-with no FedRAMP access control content. The answer correctly identified that no relevant
-FedRAMP chunks were present in the context and listed what was available. This is
-accurate and expected given the retrieval result. Root cause: Presidio scrubbed
-"FedRAMP" from the query before embedding, preventing both the `impact_level=Moderate`
-filter and FedRAMP-relevant dense retrieval from firing. See Findings below.
+The pipeline performed cross-corpus synthesis. Hybrid retrieval surfaced three NIST AI RMF
+chunks and two FedRAMP AC-1 chunks; Cohere kept both frameworks in the top 5. The answer
+cited AC-1 policy requirements (purpose, scope, roles, responsibilities, 3-year review
+cadence) from FedRAMP Moderate Security Controls Baseline page 22, and GOVERN 1.1 and
+GOVERN 1.2 from NIST AI RMF 1.0 page 27. The answer also disclosed a corpus limitation —
+the excerpts do not contain explicit cross-references between FedRAMP access controls and
+AI RMF governance — rather than fabricating a connection. This is the post-fix behavior;
+see Findings below.
+
+**Citation spot-check**
+
+| Cited section | Verified | Source |
+|---------------|----------|--------|
+| AC-1 policy elements (purpose, scope, roles) | Yes | FedRAMP Moderate Baseline, p. 22 |
+| AC-1 review cadence (3 years policy / annual procedures) | Yes | FedRAMP Moderate Baseline, p. 22 |
+| GOVERN 1.1 — legal and regulatory requirements | Yes | NIST AI RMF 1.0, p. 27 |
+| GOVERN 1.2 — trustworthy AI characteristics integration | Yes | NIST AI RMF 1.0, p. 27 |
 
 ---
 
@@ -510,10 +518,10 @@ Four architectural behaviors observed during the worked examples run that were n
 - **Outcome:** Both behaviors are correct — BM25 fires when its signal is strong enough regardless of query category; short Streamlit queries behave differently from long evaluation questions
 
 #### 3. FedRAMP PII false positive (MAIN-3)
-- **What:** Query ran without the `impact_level=Moderate` filter; retrieved exclusively AI RMF content instead of FedRAMP chunks
-- **Root cause:** Presidio `en_core_web_lg` classified "FedRAMP" as a PERSON entity and scrubbed it before embedding
-- **Outcome:** Answer correctly declined rather than hallucinating from irrelevant chunks
+- **What:** During initial worked example run, retrieval returned exclusively AI RMF content with no FedRAMP chunks for a cross-corpus query
+- **Root cause:** Presidio `en_core_web_lg` classified "FedRAMP" as a PERSON entity and scrubbed it before embedding — semantic similarity could not surface FedRAMP chunks from a query embedding stripped of the term
 - **Fix:** `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py` prevents FedRAMP, NIST, AWS, Bedrock, FISMA, ATO, and RMF from being scrubbed. See DL-017.
+- **Verification:** Example 3 above reflects post-fix behavior — hybrid retrieval returns both FedRAMP and AI RMF chunks; the reranker keeps both frameworks in the top 5; the answer cites from each.
 
 #### 4. Negative queries refused by corpus grounding, not guardrails
 - **What:** All three negative queries declined correctly; guardrail action=none on all three
