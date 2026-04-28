@@ -637,7 +637,7 @@ implemented via DL-025.
 scores fall below threshold. Evaluated and deferred for this system: the dual-guardrail
 design provides the safety floor, and the re-attempt pattern is more appropriate for
 production agentic systems where retrieval-time decisions feed into multi-step workflows.
-Reconsider when this codebase extends to agentic patterns (P3, P4).
+Reconsider when this codebase extends to agentic patterns.
 
 ---
 
