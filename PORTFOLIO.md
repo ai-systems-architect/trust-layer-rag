@@ -226,7 +226,7 @@ Full rationale with alternatives evaluated in `docs/decision_log.md`
 | GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices |
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
-| MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite, AWS Batch recommended for production ingestion |
+| MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite |
 
 ---
 
