@@ -307,6 +307,8 @@ cases follow. All traces visible in Langfuse Cloud.
 
 ### Example 1 — Control ID lookup
 
+*Category: Control ID — corresponds to golden dataset query type (IDs 1–5, 14–17). See docs/evaluation_methodology.md.*
+
 **Query:** "What does AC-6 require and what are its key enhancements?"
 
 **Retrieval — 7 candidates after RRF (control_family=AC filter applied)**
@@ -366,6 +368,8 @@ Baseline page 44.
 
 ### Example 2 — AI governance
 
+*Category: Governance — corresponds to golden dataset query type (IDs 6–13). See docs/evaluation_methodology.md.*
+
 **Query:** "How does the AI RMF Govern function establish organizational accountability for AI risk?"
 
 **Retrieval — 9 candidates after RRF (no filter)**
@@ -423,6 +427,8 @@ culture for risk management. All cited from NIST AI RMF 1.0, pages 27–28.
 ---
 
 ### Example 3 — Cross-corpus synthesis
+
+*Category: Cross-corpus — corresponds to golden dataset query type (IDs 18–20). See docs/evaluation_methodology.md.*
 
 **Query:** "How do FedRAMP access control requirements relate to NIST AI RMF governance expectations?"
 
