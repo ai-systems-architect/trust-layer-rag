@@ -573,11 +573,12 @@ Implemented items removed — see docs/decision_log.md for closed decisions (DL-
 
 ### Production Required
 
-**FedRAMP Presidio false positive (MAIN-3)** — `_DOMAIN_ALLOWLIST` in `utils/pii_filter.py`
-prevents federal acronyms from being misclassified as PERSON entities. Corpus ingestion
-scrubbing and Langfuse trace scrubbing at source remain production-only items. AWS
-Comprehend is the recommended production path when all services are within the same AWS
-account boundary. See docs/decision_log.md DL-017.
+**Presidio production path** — PII filtering is implemented at query input and generated
+output; Langfuse traces receive pre-scrubbed content. Corpus ingestion scrubbing hook
+exists in `utils/pii_filter.py` but is not wired into the ingestion pipeline — deferred
+because the current corpus (public NIST documents) contains no PII. Required when corpus
+expands to SSPs or assessment reports. AWS Comprehend is the recommended managed
+replacement for Presidio in a full production AWS deployment. See docs/decision_log.md DL-017.
 
 **RAG-RBAC role-based retrieval filtering** — `sensitivity_level` column in chunks table
 with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already exists in
@@ -589,10 +590,6 @@ sensitivity-tiered documents.
 **Manual evaluation mini-appendix** — 5 questions with human-labeled ground truth to
 validate auto-derived Recall@k labels. Removes potential retrieval-seeding bias from
 label generation.
-
-**Negative testing automation** — formalize the 5–10 unanswerable queries from Worked
-Examples into an automated suite with expected refusal outcomes and rerank score
-thresholds.
 
 **Citation precision automation** — cross-reference cited section numbers against PDF page
 ranges. Currently verified manually per worked example; automation scales verification to
