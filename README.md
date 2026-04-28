@@ -588,27 +588,25 @@ with `WHERE sensitivity_level <= user_clearance` pre-filter. Foundation already 
 the metadata filtering layer (DL-023). Required when corpus includes controlled or
 sensitivity-tiered documents.
 
-### Planned Next
-
-**Manual chunk-relevance labeling on a 5-question sample** — chunk-level relevance labels
-in the golden dataset are auto-derived via Jaccard overlap with reference answers (Option A
-in evaluation_methodology.md). A human-labeled sample would validate this and quantify any
-seeding bias. Reference answers themselves are already human-written — this addresses the
-chunk-level labels specifically.
-
-**Citation precision automation** — cross-reference cited section numbers against PDF page
-ranges. Currently verified manually per worked example; automation scales verification to
-the full golden dataset.
-
 ### Stretch
 
-**System profile intake** — structured intake of system impact level, deployment model,
-and data types to condition retrieval. Enables control applicability answers specific to
-a target system rather than general corpus lookup. Per-session input — see Long-term
-conversational memory below for the cross-session persistence variant.
+**Evaluation depth — entity-level recall and citation verification** — two complementary
+additions to the current evaluation framework. *Context entities recall:* RAGAs metric that
+checks whether specific identifiers from the reference answer (AC-2, MAP-1.1) appear inside
+retrieved chunk text. Complementary to Recall@k — Recall@k confirms the right chunk IDs
+were retrieved, entity recall confirms those chunks actually contain the control
+identifiers the answer needs. *Citation precision automation:* citations are enforced at
+generation time; automation cross-references each generated citation against source PDF
+section/page to catch cases where the model cites a plausible but incorrect section.
+Currently spot-checked manually per worked example; automation scales verification to all
+20 golden dataset questions.
 
-**Control checklist generation** — second LLM call post-retrieval to structure answers as
-actionable, system-specific control checklists rather than prose summaries.
+**System-specific compliance assistant** — per-session intake of system impact level,
+deployment model, and data types to condition retrieval; structured checklist generation as
+a second LLM call post-retrieval to produce system-specific control checklists rather than
+prose; cross-session profile persistence in RDS keyed by user ID. Three phases of one
+capability — moves the system from general corpus lookup toward target-system control
+applicability. Within-session memory already implemented via DL-025.
 
 **Structured intent extraction** — classify query intent (control lookup, gap assessment,
 cross-framework synthesis) before retrieval. Route to appropriate retriever config per
@@ -621,18 +619,6 @@ Embed via Bedrock to keep all data within the AWS boundary at ingestion time.
 **Query expansion / multi-query rewriting** — HyDE or LLM-generated query variants to
 broaden retrieval on abstract governance queries where vocabulary mismatch causes semantic
 drift.
-
-**Context entities recall** — RAGAs metric that checks whether specific identifiers
-from the reference answer (AC-2, MAP-1.1) appear inside the retrieved chunk text.
-Complementary to Recall@k: Recall@k confirms the right chunk IDs were retrieved;
-entity recall confirms those chunks actually contain the control identifiers the
-answer needs. Catches the failure mode where retrieval is semantically close but the
-specific identifier is missing from the returned text.
-
-**Long-term conversational memory (cross-session)** — persist user system profile (impact
-level, deployment model, control families reviewed) across sessions in RDS keyed by user
-ID. Builds on System profile intake to extend it across sessions. Within-session memory
-implemented via DL-025.
 
 ### Considered and Deferred
 
