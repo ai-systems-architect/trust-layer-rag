@@ -541,7 +541,7 @@ Four architectural behaviors observed during the worked examples run that were n
 | Generation | Claude Sonnet 4.5 via Bedrock | Direct Anthropic API | Bedrock keeps generation within AWS boundary — direct API sends chunks to external endpoint |
 | Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
 
-Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-028).
+Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-029).
 
 ---
 
@@ -562,7 +562,7 @@ Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failure 4 is an 
 
 | Function | Implementation |
 |---|---|
-| GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-028) |
+| GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-029) |
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
 | MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite |
@@ -585,7 +585,7 @@ self-hosted Langfuse is documented in [docs/architecture.md](docs/architecture.m
 
 ## Future Work
 
-Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-028).
+Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-029).
 
 ### Production Required
 

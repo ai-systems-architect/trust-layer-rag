@@ -203,7 +203,7 @@ integrity and evaluation validity.
 ## Key Architectural Decisions
 
 Full rationale with alternatives evaluated in `docs/decision_log.md`
-(DL-001 through DL-028).
+(DL-001 through DL-029).
 
 | Decision | Choice | Key rationale |
 |----------|--------|---------------|
@@ -271,7 +271,7 @@ PyMuPDF | tiktoken | Terraform
 
 ## Future Work
 
-Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-028).
+Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-029).
 
 ### Production Required
 
@@ -299,4 +299,4 @@ Implemented items removed — see docs/decision_log.md for closed decisions (DL-
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
-Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-028.*
+Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-029.*

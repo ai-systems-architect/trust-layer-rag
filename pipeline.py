@@ -1,7 +1,17 @@
 import logging
+import os
 import re
 import sys
+import time
 from typing import Optional
+
+# Debug instrumentation gate — when DEBUG_PIPELINE=true is set in the environment,
+# run_pipeline() prints formatted RETRIEVE/RERANK/SUMMARY blocks via helpers in
+# evaluation/worked_examples_debug.py. Used by scripts/run_worked_examples.py to
+# regenerate the worked-example tables in README.md. Zero cost when unset — the
+# bool comparison and four `if _DEBUG:` checks are negligible on the hot path.
+# see docs/decision_log.md DL-029
+_DEBUG = os.getenv("DEBUG_PIPELINE", "").lower() in ("1", "true", "yes")
 
 from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
 from retrieval.semantic import semantic_search
@@ -107,6 +117,8 @@ def run_pipeline(
 
     see docs/decision_log.md DL-008, DL-006, DL-022, DL-023, DL-025
     """
+    _t0 = time.time() if _DEBUG else None
+
     # --- PII scrub ---
     # Scrub query before any external service call (OpenAI embedding, Cohere rerank,
     # Bedrock). Original query retained for user-facing display only.
@@ -152,6 +164,13 @@ def run_pipeline(
     enriched_query = enrich_query(query_clean, history)
     query_was_enriched = enriched_query != query_clean
 
+    if _DEBUG:
+        from evaluation.worked_examples_debug import print_enrichment_block
+        print_enrichment_block(
+            query_clean, enriched_query, query_was_enriched,
+            guardrail_check["action"],
+        )
+
     # --- metadata filter classification ---
     # Run on enriched query — resolved control IDs and FedRAMP keywords are
     # more reliable classification signals than unresolved pronouns.
@@ -186,12 +205,20 @@ def run_pipeline(
             chunks = semantic_search(enriched_query, top_k=TOP_K_RETRIEVAL, **filters)
         span.end(output={"chunk_count": len(chunks)})
 
+        if _DEBUG:
+            from evaluation.worked_examples_debug import print_retrieve_block
+            print_retrieve_block(chunks, filters)
+
         # --- rerank ---
         # Enriched query passed to Cohere — cross-encoder scores against resolved
         # query produce better precision than scoring against an ambiguous pronoun.
         span = trace.span(name="rerank", input={"chunk_count": len(chunks)})
         reranked = rerank(enriched_query, chunks, top_k=TOP_K_RERANK)
         span.end(output={"chunk_count": len(reranked)})
+
+        if _DEBUG:
+            from evaluation.worked_examples_debug import print_rerank_block
+            print_rerank_block(reranked)
 
         # --- generate ---
         # Enriched query passed to generation — prompt reflects the resolved intent.
@@ -203,6 +230,14 @@ def run_pipeline(
         })
 
         trace.update(output={"answer": result["answer"]})
+
+        if _DEBUG:
+            from evaluation.worked_examples_debug import print_summary_block
+            print_summary_block(
+                filters, query_was_enriched, guardrail_check["action"],
+                result["guardrail_action"], trace.id,
+                int((time.time() - _t0) * 1000), result["answer"],
+            )
 
     finally:
         lf.flush()
