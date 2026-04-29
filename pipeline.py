@@ -5,14 +5,6 @@ import sys
 import time
 from typing import Optional
 
-# Debug instrumentation gate — when DEBUG_PIPELINE=true is set in the environment,
-# run_pipeline() prints formatted RETRIEVE/RERANK/SUMMARY blocks via helpers in
-# evaluation/worked_examples_debug.py. Used by scripts/run_worked_examples.py to
-# regenerate the worked-example tables in README.md. Zero cost when unset — the
-# bool comparison and four `if _DEBUG:` checks are negligible on the hot path.
-# see docs/decision_log.md DL-029
-_DEBUG = os.getenv("DEBUG_PIPELINE", "").lower() in ("1", "true", "yes")
-
 from config import TOP_K_RETRIEVAL, TOP_K_RERANK, LANGFUSE_HOST
 from retrieval.semantic import semantic_search
 from retrieval.hybrid import hybrid_search
@@ -24,6 +16,14 @@ from utils.pii_filter import scrub
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# Debug instrumentation gate — when DEBUG_PIPELINE=true is set in the environment,
+# run_pipeline() prints formatted RETRIEVE/RERANK/SUMMARY blocks via helpers in
+# evaluation/worked_examples_debug.py. Used by scripts/run_worked_examples.py to
+# regenerate the worked-example tables in README.md. Zero cost when unset — the
+# bool comparison and four `if _DEBUG:` checks are negligible on the hot path.
+# see docs/decision_log.md DL-029
+_DEBUG = os.getenv("DEBUG_PIPELINE", "").lower() in ("1", "true", "yes")
 
 # ---------------------------------------------------------------------------
 # Rule-based query classifier — infers metadata pre-filters from query text
