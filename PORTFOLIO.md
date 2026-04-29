@@ -1,6 +1,6 @@
-# The Trust Layer for Federal Compliance AI
+# The Trust Layer for Enterprise AI
 
-**Production-grade governed RAG system for federal compliance corpora**
+**Federal Compliance Reference Implementation**
 
 Raghunath Devayajanam · April 2026
 

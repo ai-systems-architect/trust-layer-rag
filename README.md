@@ -1,13 +1,13 @@
-# The Trust Layer for Federal Compliance AI
+# The Trust Layer for Enterprise AI
 ![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=governed-compliance-engine&countColor=%23263759)
 
 ![Beyond Retrieval — Architecting the Trust Layer for Enterprise AI](docs/images/trust_layer_cover.png)
 
 *Four principles for building reliable, governed RAG systems. Detailed pipeline architecture below.*
 
-**Production-grade governed RAG system for federal compliance corpora**
+**Federal Compliance Reference Implementation**
 
-A governed Retrieval-Augmented Generation system over four federal compliance frameworks — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP Moderate Baseline (1,696 chunks total). The system answers compliance questions by retrieving authoritative source content, reranking for precision, generating grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing dual guardrails against unsupported claims.
+A production-grade, governed Retrieval-Augmented Generation system over four federal compliance frameworks — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP Moderate Baseline (1,696 chunks total). The system answers compliance questions by retrieving authoritative source content, reranking for precision, generating grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing dual guardrails against unsupported claims.
 
 Built as a compliance *reference assistant* — not a compliance *assessment tool*. The system retrieves and synthesizes what frameworks require. It does not determine whether a system is compliant. That boundary is enforced in the system prompt and validated by Bedrock Guardrails on every response.
 
