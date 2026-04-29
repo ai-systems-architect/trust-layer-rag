@@ -4,7 +4,10 @@
 
 Raghunath Devayajanam · April 2026
 
-📄 Companion artifacts: **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** · **Beyond Retrieval: Architecting the Trust Layer for Enterprise AI** *(companion article — link coming May 2026)*
+📄 **Companion artifacts**
+
+- **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** — federal-grade governance artifact mapping RAG risks to implemented controls per NIST AI RMF 1.0. Sample artifact — fictional sponsoring agency.
+- **Beyond Retrieval: Architecting the Trust Layer for Enterprise AI** *(companion article — link coming May 2026)* — generalized architectural patterns drawn from production RAG governance lessons.
 
 ---
 
@@ -289,8 +292,6 @@ Implemented items removed — see docs/decision_log.md for closed decisions (DL-
 **Self-correction loop** — re-attempt retrieval with broader search radius when faithfulness scores fall below threshold. Evaluated and deferred for this system: the dual-guardrail design provides the safety floor, and the re-attempt pattern is more appropriate for production agentic systems where retrieval-time decisions feed into multi-step workflows. Reconsider when this codebase extends to agentic patterns.
 
 ---
-
-This project includes a sample AI Impact Assessment ([AIIA PDF](docs/AIIA_FCIS_v1_0.pdf)) — a federal-style governance document mapping RAG risks to implemented controls per NIST AI RMF 1.0.
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
