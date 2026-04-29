@@ -1,4 +1,4 @@
-# Evaluation Methodology — The Trust Layer for Federal Compliance AI
+# Evaluation Methodology — Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 
 Three independent evaluation layers assess different concerns:
 

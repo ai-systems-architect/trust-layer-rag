@@ -1,11 +1,11 @@
-# The Trust Layer for Enterprise AI
+# Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 ![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=governed-compliance-engine&countColor=%23263759)
 
 ![Beyond Retrieval — Architecting the Trust Layer for Enterprise AI](docs/images/trust_layer_cover.png)
 
 *Four principles for building reliable, governed RAG systems. Detailed pipeline architecture below.*
 
-**Federal Compliance Reference Implementation**
+**Governed RAG · Federal Compliance Reference Implementation**
 
 A production-grade, governed Retrieval-Augmented Generation system over four federal compliance frameworks — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP Moderate Baseline (1,696 chunks total). The system answers compliance questions by retrieving authoritative source content, reranking for precision, generating grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing dual guardrails against unsupported claims.
 
@@ -125,84 +125,22 @@ Dual guardrail architecture — input gate blocks before retrieval fires, output
 prevents overclaiming after generation. A blocked input query costs one Bedrock
 apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
-### PII Scrub
-Presidio `en_core_web_lg` scans the raw query before any external service call and
-replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others)
-with bracketed type placeholders. A second pass runs on the generated answer before
-returning to the caller — catches query PII echoed in the response. A
-`_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a
-control ID regex prevent federal acronyms and NIST identifiers (AC-2, IR-4) from
-being misclassified as PERSON entities by the NER model. See docs/decision_log.md DL-017.
+**Pipeline stages (offline ingestion + online query path):**
 
-### Input Guardrail
-Bedrock Guardrails `apply_guardrail` API checks the raw query before any retrieval
-runs. Blocks prompt injection, off-topic queries, and jailbreak patterns with no
-downstream token cost.
+| # | Stage | What it does | DL |
+|---|---|---|---|
+| 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | DL-017 |
+| 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection, off-topic queries, and jailbreak patterns before retrieval fires — one Bedrock call cost vs full pipeline. | DL-022 |
+| 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` resolves pronouns and ambiguous references in follow-up queries before the embedding call. Bypassed on first turn, long queries, queries with no pronouns. | DL-025 |
+| 4 | Classify | Rule-based metadata classifier infers `control_family` and `impact_level` filters from the enriched query. AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction). | DL-023 |
+| 5 | Ingestion (offline) | NIST 800-53, AI RMF, AI 600-1, FedRAMP Moderate parsed, chunked (600 tokens / 100 overlap), embedded via OpenAI text-embedding-3-large (1536 dims via Matryoshka), stored in pgvector on RDS with `control_family` and `impact_level` metadata columns. | DL-007, DL-018 |
+| 6 | Retrieval | Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) fused via RRF. Control IDs regex pre-extracted before BM25's 5-term limit. Returns top-10 candidates. | DL-008, DL-019 |
+| 7 | Post-RRF Quality Gate | `MIN_RRF_SCORE=0.0150` drops weak candidates before Cohere reranks them. Safety floor: 3 candidates always pass. Threshold derived from empirical score distribution across 7 representative queries. | DL-024 |
+| 8 | Reranking | Cohere rerank-english-v3.0 cross-encoder scores filtered candidates jointly against the query. Returns top-5. | DL-005 |
+| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Pydantic `GenerateResponse` validates response shape before return. | DL-004, DL-022 |
+| 10 | Evaluation (offline) | Three independent layers — RAGAs (Faithfulness/Context Precision/Context Recall/Answer Relevancy), retrieval diagnostics (Recall@k/MRR/nDCG across three configurations), and adversarial guardrail evaluation (5 negative cases with two-signal pass detection). | DL-009, DL-021, DL-028 |
 
-### Query Enrichment
-Resolves pronouns and ambiguous references in follow-up queries using recent
-conversation context before the embedding call. "How does that relate to least
-privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?" —
-the retriever embeds a fully specified query. Claude via Bedrock at `temperature=0.0`
-rewrites the query deterministically. Bypassed on first turn, long queries (8+ words),
-and queries with no ambiguous pronouns — adds ~150ms only on triggered queries.
-Rewrite visible in app UI and Langfuse trace. See docs/decision_log.md DL-025.
-
-### Classify
-Rule-based query classifier infers metadata pre-filters from the enriched query text.
-Queries containing NIST 800-53 control IDs (e.g. AC-2, IR-4) resolve to a
-`control_family` filter; queries mentioning FedRAMP Moderate resolve to an
-`impact_level` filter. Runs on the enriched query so resolved control IDs trigger
-the filter even when the original query used a pronoun. See docs/decision_log.md DL-023.
-
-### Ingestion
-NIST 800-53, AI RMF, AI 600-1, and FedRAMP Moderate documents parsed, chunked,
-embedded, and stored in pgvector on RDS. Each chunk carries `control_family` (NIST
-800-53 family prefix, extracted from text) and `impact_level` (FedRAMP impact,
-source-derived) metadata columns for pre-filter support.
-
-### Retrieval
-Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal
-Rank Fusion. Returns up to top-10 chunks. NIST 800-53 control identifiers (AC-2,
-IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is
-applied — control IDs always reach the sparse index as high-value anchor terms
-regardless of query length. See docs/decision_log.md DL-019.
-
-### Post-RRF Quality Gate
-Candidates below `MIN_RRF_SCORE = 0.0150` are dropped before Cohere sees them. RRF
-produces a ranked list regardless of absolute match quality — the gate stops weak
-candidates from consuming rerank quota. Safety floor of 3 candidates guaranteed.
-Threshold derived from empirical score distribution across 7 representative query
-types: 6–10 candidates pass per query, average 8.1 of 10; safety floor triggered on
-0 of 7 queries. Threshold 0.0150 was set from first principles — the commonly cited
-0.008 does not apply when k=60, because the theoretical minimum RRF score with
-top_k=10 is 1/(60+10) = 0.0143, making anything below that a no-op. See
-docs/decision_log.md DL-024.
-
-### Reranking
-Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly
-against the query. Returns top-5.
-
-### Generation with Output Guardrail
-Claude Sonnet 4.5 via Amazon Bedrock. Generation and output guardrail run in a
-single `converse()` call with `guardrailConfig` attached — Bedrock generates the
-response and applies the guardrail in one operation. The guardrail catches
-overclaiming beyond retrieved context, compliance status assertions, and misconduct.
-
-The combined Bedrock response is validated with Pydantic — `GenerateResponse` model
-enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before the
-result returns to the pipeline.
-
-### Evaluation
-Three independent evaluation layers run offline against the golden dataset:
-
-RAGAs scores answer quality (Faithfulness, Context Precision, Context Recall, Answer
-Relevancy) across semantic and hybrid retrieval configurations. Retrieval diagnostics
-score retrieval in isolation (Recall@k, MRR, nDCG across semantic, hybrid, and
-hybrid+rerank). Adversarial guardrail evaluation (`evaluation/guardrail_test.py`) runs
-the five negative test cases through the full pipeline and verifies correct refusal
-behavior — two-signal pass detection: hard guardrail block or hedge phrase in the
-generated answer. Full methodology in `docs/evaluation_methodology.md`.
+Full per-stage rationale, code references, and design tradeoffs are in [docs/architecture.md](docs/architecture.md). Decision log entries (DL-001 through DL-029) cover the why behind each stage in [docs/decision_log.md](docs/decision_log.md).
 
 ---
 

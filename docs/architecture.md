@@ -1,4 +1,4 @@
-# Architecture — The Trust Layer for Federal Compliance AI
+# Architecture — Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 
 High-level system design. For why each component was chosen over alternatives,
 see docs/decision_log.md.
@@ -119,6 +119,12 @@ Claude via Bedrock at `temperature=0.0` rewrites the query deterministically. By
 Rule-based query classifier infers metadata pre-filters from the enriched query text. Queries containing NIST 800-53 control IDs (e.g., AC-2, IR-4) resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger the filter even when the original query used a pronoun.
 
 Empirical impact: AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction) before HNSW search runs. Implementation: `pipeline.py`. See DL-023.
+
+#### Ingestion
+
+NIST 800-53, AI RMF, and AI 600-1 ingest as PDFs via PyMuPDF; FedRAMP Moderate ingests as `.docx` converted to PDF via LibreOffice headless before extraction. Text is chunked with tiktoken `cl100k_base` at 600 tokens with 100-token overlap, then embedded via OpenAI `text-embedding-3-large` at 1536 dims (Matryoshka truncation from 3072). Chunks land in pgvector on RDS with HNSW cosine index for dense retrieval and a GIN tsvector index for BM25.
+
+Each chunk carries two metadata columns that the Classify stage uses as pre-filters: `control_family` (NIST 800-53 family prefix, extracted from chunk text via regex) and `impact_level` (FedRAMP impact, source-derived). These columns are the reason metadata-aware retrieval can reduce the 1,696-chunk corpus to a relevant subset before HNSW search runs. See DL-007, DL-016, DL-018.
 
 #### Retrieval
 

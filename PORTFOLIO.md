@@ -1,6 +1,6 @@
-# The Trust Layer for Enterprise AI
+# Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 
-**Federal Compliance Reference Implementation**
+**Governed RAG · Federal Compliance Reference Implementation**
 
 Raghunath Devayajanam · April 2026
 
