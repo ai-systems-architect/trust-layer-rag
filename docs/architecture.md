@@ -94,6 +94,64 @@ User Query
                 (span-level: retrieve → rerank → generate)
 ```
 
+### Per-Stage Implementation Detail
+
+The diagram above shows the stage sequence. The per-stage notes below capture the implementation choices that aren't visible in the diagram — bypass logic, threshold derivation, allowlist composition, and validation patterns.
+
+#### PII Scrub
+
+Presidio `en_core_web_lg` scans the raw query before any external service call and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the generated answer before returning to the caller — catches query PII echoed in the response.
+
+A `_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a control ID regex prevent federal acronyms and NIST identifiers (AC-2, IR-4) from being misclassified as PERSON entities by the NER model. Implementation: `utils/pii_filter.py`. See DL-017.
+
+#### Input Guardrail
+
+Bedrock Guardrails `apply_guardrail` API checks the raw query before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak patterns with no downstream token cost. Cost: one Bedrock call (~50ms, ~$0.0008) versus the full pipeline cost on adversarial queries. See DL-022.
+
+#### Query Enrichment
+
+Resolves pronouns and ambiguous references in follow-up queries using recent conversation context before the embedding call. "How does that relate to least privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?" — the retriever embeds a fully specified query.
+
+Claude via Bedrock at `temperature=0.0` rewrites the query deterministically. Bypassed on first turn, long queries (8+ words), and queries with no ambiguous pronouns — adds ~150ms only on triggered queries. Rewrite visible in app UI and Langfuse trace. Implementation: `retrieval/query_enrichment.py`. See DL-025.
+
+#### Classify
+
+Rule-based query classifier infers metadata pre-filters from the enriched query text. Queries containing NIST 800-53 control IDs (e.g., AC-2, IR-4) resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger the filter even when the original query used a pronoun.
+
+Empirical impact: AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction) before HNSW search runs. Implementation: `pipeline.py`. See DL-023.
+
+#### Retrieval
+
+Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal Rank Fusion (k=60). Returns up to top-10 chunks.
+
+NIST 800-53 control identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is applied — control IDs always reach the sparse index as high-value anchor terms regardless of query length. Implementation: `retrieval/hybrid.py`. See DL-008, DL-019.
+
+#### Post-RRF Quality Gate
+
+Candidates below `MIN_RRF_SCORE = 0.0150` are dropped before Cohere sees them. RRF produces a ranked list regardless of absolute match quality — the gate stops weak candidates from consuming rerank quota. Safety floor of 3 candidates guaranteed.
+
+Threshold derived from empirical score distribution across 7 representative query types: 6–10 candidates pass per query, average 8.1 of 10; safety floor triggered on 0 of 7 queries. Threshold 0.0150 was set from first principles — the commonly cited 0.008 does not apply when k=60, because the theoretical minimum RRF score with top_k=10 is 1/(60+10) = 0.0143, making anything below that a no-op. See DL-024.
+
+#### Reranking
+
+Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly against the query. Returns top-5. Implementation: `retrieval/rerank.py`. See DL-005.
+
+#### Generation with Output Guardrail
+
+Claude Sonnet 4.5 via Amazon Bedrock. Generation and output guardrail run in a single `converse()` call with `guardrailConfig` attached — Bedrock generates the response and applies the guardrail in one operation. The guardrail catches overclaiming beyond retrieved context, compliance status assertions, and misconduct.
+
+The combined Bedrock response is validated with Pydantic — `GenerateResponse` model enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before the result returns to the pipeline. Malformed or truncated responses are rejected. Implementation: `generation/generate.py`. See DL-004, DL-022.
+
+#### Evaluation (offline)
+
+Three independent evaluation layers run against the golden dataset:
+
+- **RAGAs** scores answer quality (Faithfulness, Context Precision, Context Recall, Answer Relevancy) across semantic and hybrid retrieval configurations.
+- **Retrieval diagnostics** score retrieval in isolation (Recall@k, MRR, nDCG across semantic, hybrid, and hybrid+rerank).
+- **Adversarial guardrail evaluation** (`evaluation/guardrail_test.py`) runs the five negative test cases through the full pipeline and verifies correct refusal behavior — two-signal pass detection: hard guardrail block or hedge phrase in the generated answer.
+
+Full methodology in `docs/evaluation_methodology.md`. See DL-009, DL-021, DL-028.
+
 ---
 
 ## Component Stack
