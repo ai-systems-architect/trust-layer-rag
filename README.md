@@ -1,33 +1,38 @@
 # The Trust Layer for Federal Compliance AI
 ![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=governed-compliance-engine&countColor=%23263759)
-## Production-grade governed RAG system for federal compliance corpora
 
-> Independent portfolio project demonstrating production-grade governed RAG architecture for federal compliance corpora. Built on public-domain US Government frameworks (NIST 800-53, NIST AI RMF 1.0, NIST AI 600-1, FedRAMP Moderate). Not affiliated with or endorsed by any agency, contractor, or commercial vendor. Views are the author's own.
+**Production-grade governed RAG system for federal compliance corpora**
 
-Designed for high-stakes, audit-sensitive environments where correctness,
-traceability, and controlled behavior matter more than fluency.
+A governed Retrieval-Augmented Generation system over four federal compliance frameworks — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP Moderate Baseline (1,696 chunks total). The system answers compliance questions by retrieving authoritative source content, reranking for precision, generating grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing dual guardrails against unsupported claims.
 
-> 📄 **AI Impact Assessment** — A federal-style governance artifact accompanies this project. The [AIIA (PDF)](docs/AIIA_FCIS_v1_0.pdf) maps RAG-specific risks (hallucination, overclaiming, retrieval integrity, PII leakage to traces) to implemented controls and evidence, following NIST AI RMF 1.0, EO 13960, and OMB M-21-06 patterns. Sample artifact — fictional sponsoring agency.
+Built as a compliance *reference assistant* — not a compliance *assessment tool*. The system retrieves and synthesizes what frameworks require. It does not determine whether a system is compliant. That boundary is enforced in the system prompt and validated by Bedrock Guardrails on every response.
 
-A production-grade, governed Retrieval-Augmented Generation (RAG) system over
-federal compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI
-600-1, and FedRAMP Moderate Baseline. The system answers compliance questions by
-retrieving authoritative source content, reranking for precision, generating
-grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing
-guardrails against overclaiming.
+**What makes this distinctive:**
 
-Built as a **compliance reference assistant — not a compliance assessment tool.**
-The system retrieves and synthesizes what frameworks require. It does not determine
-whether a system is compliant. That boundary is enforced through system prompts and
-Bedrock Guardrails.
+- **Hybrid retrieval with measurable lift** — dense pgvector HNSW + BM25 sparse via Reciprocal Rank Fusion + Cohere cross-encoder reranking. nDCG@5 progresses from 0.8883 (semantic-only) to 0.9265 (hybrid + rerank) on a 20-question architect-level evaluation set.
+- **Three independent evaluation layers** — RAGAs end-to-end (Faithfulness 0.89–0.90, Context Precision 0.94–0.95 across configurations), retrieval diagnostics (Recall@k, MRR, nDCG across three configurations), and adversarial guardrail evaluation. Each layer answers a different question.
+- **Dual-gate Bedrock Guardrails** — input gate blocks injection and off-topic queries before retrieval fires (saves full pipeline cost on adversarial input). Output gate catches unsupported claims post-generation in the same `converse()` call.
+- **Domain-calibrated PII filtering** — Presidio with a 20-term federal allowlist and control-ID regex post-filter prevents false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names (FedRAMP, NIST, AWS) that general-purpose NER classifies as PERSON entities.
+- **Decision log discipline** — every architectural choice documented in DL-001 through DL-029 with alternatives evaluated and rationale recorded. The architecture is auditable, not just observable.
+- **Federal-grade governance artifact** — sample AI Impact Assessment maps RAG-specific risks to implemented controls following NIST AI RMF 1.0, EO 13960, and OMB M-21-06 patterns.
 
-**Portfolio:** P2 of 4 — follows
-[responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
+Designed for high-stakes, audit-sensitive environments where correctness, traceability, and controlled behavior matter more than fluency.
 
-This deployment uses a public RDS endpoint and Streamlit Community Cloud for
-portfolio accessibility. For regulated workloads, the production path uses private
-VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in
-[docs/architecture.md](docs/architecture.md).
+---
+
+### 📄 Project artifacts
+
+- **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** — federal-grade governance artifact mapping RAG-specific risks (hallucination, overclaiming, retrieval integrity, PII leakage to traces) to implemented controls and evidence. Sample artifact — fictional sponsoring agency.
+- **Beyond Retrieval: Architecting the Trust Layer for Enterprise AI** *(companion article — link coming May 2026)* — generalized architectural patterns this project demonstrates, drawn from production RAG governance lessons.
+- **[Architecture](docs/architecture.md)** · **[Decision log](docs/decision_log.md)** · **[Evaluation methodology](docs/evaluation_methodology.md)**
+
+---
+
+> Independent portfolio project demonstrating production-grade governed RAG architecture for federal compliance corpora. Built on public-domain US Government frameworks. Not affiliated with or endorsed by any agency, contractor, or commercial vendor. Views are the author's own.
+>
+> Companion to [responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)
+>
+> This deployment uses a public RDS endpoint and Streamlit Community Cloud for portfolio accessibility. For regulated workloads, the production path uses private VPC, self-hosted Langfuse, and Bedrock-native embeddings — documented in [docs/architecture.md](docs/architecture.md).
 
 ---
 
