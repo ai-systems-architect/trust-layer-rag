@@ -129,16 +129,16 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
 | # | Stage | What it does | DL |
 |---|---|---|---|
-| 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | DL-017 |
-| 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection, off-topic queries, and jailbreak patterns before retrieval fires — one Bedrock call cost vs full pipeline. | DL-022 |
-| 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` resolves pronouns and ambiguous references in follow-up queries before the embedding call. Bypassed on first turn, long queries, queries with no pronouns. | DL-025 |
-| 4 | Classify | Rule-based metadata classifier infers `control_family` and `impact_level` filters from the enriched query. AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction). | DL-023 |
-| 5 | Ingestion (offline) | NIST 800-53, AI RMF, AI 600-1, FedRAMP Moderate parsed, chunked (600 tokens / 100 overlap), embedded via OpenAI text-embedding-3-large (1536 dims via Matryoshka), stored in pgvector on RDS with `control_family` and `impact_level` metadata columns. | DL-007, DL-018 |
-| 6 | Retrieval | Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) fused via RRF. Control IDs regex pre-extracted before BM25's 5-term limit. Returns top-10 candidates. | DL-008, DL-019 |
-| 7 | Post-RRF Quality Gate | `MIN_RRF_SCORE=0.0150` drops weak candidates before Cohere reranks them. Safety floor: 3 candidates always pass. Threshold derived from empirical score distribution across 7 representative queries. | DL-024 |
-| 8 | Reranking | Cohere rerank-english-v3.0 cross-encoder scores filtered candidates jointly against the query. Returns top-5. | DL-005 |
-| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Pydantic `GenerateResponse` validates response shape before return. | DL-004, DL-022 |
-| 10 | Evaluation (offline) | Three independent layers — RAGAs (Faithfulness/Context Precision/Context Recall/Answer Relevancy), retrieval diagnostics (Recall@k/MRR/nDCG across three configurations), and adversarial guardrail evaluation (5 negative cases with two-signal pass detection). | DL-009, DL-021, DL-028 |
+| 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | 017 |
+| 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection, off-topic queries, and jailbreak patterns before retrieval fires — one Bedrock call cost vs full pipeline. | 022 |
+| 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` resolves pronouns and ambiguous references in follow-up queries before the embedding call. Bypassed on first turn, long queries, queries with no pronouns. | 025 |
+| 4 | Classify | Rule-based metadata classifier infers `control_family` and `impact_level` filters from the enriched query. AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction). | 023 |
+| 5 | Ingestion (offline) | NIST 800-53, AI RMF, AI 600-1, FedRAMP Moderate parsed, chunked (600 tokens / 100 overlap), embedded via OpenAI text-embedding-3-large (1536 dims via Matryoshka), stored in pgvector on RDS with `control_family` and `impact_level` metadata columns. | 007, 018 |
+| 6 | Retrieval | Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) fused via RRF. Control IDs regex pre-extracted before BM25's 5-term limit. Returns top-10 candidates. | 008, 019 |
+| 7 | Post-RRF Quality Gate | `MIN_RRF_SCORE=0.0150` drops weak candidates before Cohere reranks them. Safety floor: 3 candidates always pass. Threshold derived from empirical score distribution across 7 representative queries. | 024 |
+| 8 | Reranking | Cohere rerank-english-v3.0 cross-encoder scores filtered candidates jointly against the query. Returns top-5. | 005 |
+| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Pydantic `GenerateResponse` validates response shape before return. | 004, 022 |
+| 10 | Evaluation (offline) | Three independent layers — RAGAs (Faithfulness/Context Precision/Context Recall/Answer Relevancy), retrieval diagnostics (Recall@k/MRR/nDCG across three configurations), and adversarial guardrail evaluation (5 negative cases with two-signal pass detection). | 009, 021, 028 |
 
 Full per-stage rationale, code references, and design tradeoffs are in [docs/architecture.md](docs/architecture.md). Decision log entries (DL-001 through DL-029) cover the why behind each stage in [docs/decision_log.md](docs/decision_log.md).
 
