@@ -1,25 +1,18 @@
 # The Trust Layer for Federal Compliance AI
-## Production-grade governed RAG system for federal compliance corpora
 
-**Raghunath Devayajanam**
-GitHub: https://github.com/ai-systems-architect/governed-compliance-engine
+**Production-grade governed RAG system for federal compliance corpora**
+
+Raghunath Devayajanam · April 2026
+
+📄 Companion artifacts: **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** · **Beyond Retrieval: Architecting the Trust Layer for Enterprise AI** *(companion article — link coming May 2026)*
 
 ---
 
 ## What This Is
 
-A production-grade Retrieval-Augmented Generation pipeline over federal
-compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI
-600-1, and FedRAMP Moderate Baseline. The system answers compliance
-questions by retrieving authoritative source content, reranking for
-precision, generating grounded responses via Claude Sonnet 4.5 through
-Amazon Bedrock, and enforcing guardrails against compliance determinations and unsupported claims.
+A production-grade Retrieval-Augmented Generation pipeline over federal compliance documents — NIST SP 800-53 Rev 5, NIST AI RMF 1.0, NIST AI 600-1, and FedRAMP Moderate Baseline. The system answers compliance questions by retrieving authoritative source content, reranking for precision, generating grounded responses via Claude Sonnet 4.5 through Amazon Bedrock, and enforcing guardrails against unsupported claims.
 
-Built as a compliance reference assistant — not a compliance assessment
-tool. The system retrieves and synthesizes what the frameworks require.
-It does not assess whether a specific system satisfies those requirements.
-That distinction is enforced in the system prompt and validated by
-Bedrock Guardrails on every response.
+Built as a compliance *reference assistant* — not a compliance *assessment tool*. The system retrieves and synthesizes what the frameworks require. It does not assess whether a specific system satisfies those requirements. That distinction is enforced in the system prompt and validated by Bedrock Guardrails on every response.
 
 ![Governed RAG architecture](docs/images/governed_rag_architecture.png)
 *Governed RAG architecture — three-pipeline view with governance, observability, and security boundaries marked.*
