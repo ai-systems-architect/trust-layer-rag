@@ -1,5 +1,5 @@
 # Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
-![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=governed-compliance-engine&countColor=%23263759)
+![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=trust-layer-rag&countColor=%23263759)
 
 ![Beyond Retrieval — Architecting the Trust Layer for Enterprise AI](docs/images/trust_layer_cover.png)
 
@@ -388,8 +388,8 @@ sudo apt-get install libreoffice
 ## Setup
 
 ```bash
-git clone https://github.com/ai-systems-architect/governed-compliance-engine.git
-cd governed-compliance-engine
+git clone https://github.com/ai-systems-architect/trust-layer-rag.git
+cd trust-layer-rag
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

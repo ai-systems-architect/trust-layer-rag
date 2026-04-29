@@ -37,5 +37,5 @@ variable "s3_bucket_name" {
 variable "project_tag" {
   description = "Project tag applied to all resources for cost tracking"
   type        = string
-  default     = "governed-compliance-engine"
+  default     = "trust-layer-rag"
 }

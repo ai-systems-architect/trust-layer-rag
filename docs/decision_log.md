@@ -1246,7 +1246,7 @@ returning an explanation.
 ## DL-026 — P2 Project Closure
 **Date:** 2026-04-15
 
-All planned pipeline enhancements for governed-compliance-engine are implemented and
+All planned pipeline enhancements for trust-layer-rag are implemented and
 documented. Items completed since initial RAGAs evaluation (DL-020):
 
 | Item | Decision | Reference |
