@@ -174,9 +174,12 @@ distance. Runs only on the top-10 retrieved chunks, not the full corpus.
 
 ## Proof of Operation
 
-Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?" Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
+Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?"
+Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
 
-Full pipeline exercised: input guardrail checked → classify_query inferred control_family=AC (424 of 1,696 chunks searched, 75% reduction) → hybrid retrieval (dense + BM25, sparse_query: 'AC-6 require key enhancements') → post-RRF gate passed 7 of 11 candidates → Cohere reranked 7 → 5 → Claude Sonnet 4.5 generated cited response → guardrail action: none.
+The trace screenshots below verify that the architectural claims in the prior sections match the runtime behavior. The full pipeline ran end-to-end: input guardrail checked, metadata classifier inferred `control_family=AC` (424 of 1,696 chunks searched — 75% reduction), hybrid retrieval combined dense + BM25 with `sparse_query: 'AC-6 require key enhancements'`, post-RRF gate passed 7 of 11 candidates, Cohere reranked 7 → 5, Claude Sonnet 4.5 generated a cited response, output guardrail action: none.
+
+For a high-level demo: see [Worked Examples](docs/worked_examples.md) for the AC-6 query rendered as a user-facing answer with citations and retrieved chunks. The screenshots below show the underlying pipeline trace for architectural verification.
 
 ![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
 *Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
