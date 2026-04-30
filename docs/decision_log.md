@@ -449,7 +449,7 @@ one access boundary, and one audit trail — same single security boundary
 principle as pgvector on RDS. raw/ stores source PDFs as downloaded;
 processed/ stores chunks.json after ingestion. Prefixes provide logical
 separation without the operational overhead of multiple buckets.
-At corpus scale (~4,900 chunks, four PDFs) storage cost is negligible
+At corpus scale (~1,696 chunks, four PDFs) storage cost is negligible
 (<$0.01/month).
 
 **Why single bucket over multiple buckets:**
