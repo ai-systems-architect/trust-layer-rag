@@ -1,7 +1,7 @@
 # Architecture — Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 
 High-level system design. For why each component was chosen over alternatives,
-see docs/decision_log.md.
+see [decision_log.md](decision_log.md).
 
 ---
 
@@ -156,7 +156,7 @@ Three independent evaluation layers run against the golden dataset:
 - **Retrieval diagnostics** score retrieval in isolation (Recall@k, MRR, nDCG across semantic, hybrid, and hybrid+rerank).
 - **Adversarial guardrail evaluation** (`evaluation/guardrail_test.py`) runs the five negative test cases through the full pipeline and verifies correct refusal behavior — two-signal pass detection: hard guardrail block or hedge phrase in the generated answer.
 
-Full methodology in `docs/evaluation_methodology.md`. See DL-009, DL-021, DL-028.
+Full methodology in [`evaluation_methodology.md`](evaluation_methodology.md). See DL-009, DL-021, DL-028.
 
 ---
 
@@ -281,14 +281,25 @@ from Streamlit. Security enforced via SSL (rds.force_ssl=1) and
 strong password. Default VPC used — dedicated VPC adds complexity
 without security benefit given public endpoint requirement.
 Corpus is public NIST documents — no sensitive data.
-See docs/decision_log.md DL-015.
+See [decision_log.md](decision_log.md) DL-015.
 
-### PII Filtering (Production Requirement)
+### PII Filtering
 
-Production deployments require PII filtering at three layers: query input
-before embedding, corpus ingestion before chunking, and generated output
-before UI rendering. Langfuse traces must be scrubbed at source to prevent
-PII persistence in the observability store. See docs/decision_log.md DL-017.
+PII filtering is implemented at two of four layers and deliberately deferred at the remaining two, with the deferral rationale documented per layer.
+
+**Implemented layers:**
+
+- **Query input scrub.** Presidio en_core_web_lg runs on the raw query before any external service call (OpenAI, Cohere, Langfuse, Bedrock). A domain allowlist (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a control-ID regex post-filter prevent false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names. See `utils/pii_filter.py`.
+
+- **Generated output scrub.** A second Presidio pass runs on Claude's response before returning to the caller. Catches query PII echoed in the answer. Defense-in-depth pattern — output scrub catches what the input scrub may have missed.
+
+**Deferred layers (with documented rationale):**
+
+- **Corpus ingestion scrub.** Implementation hook exists in `utils/pii_filter.py` but is not wired into the ingestion pipeline. Not required for the current corpus (public NIST documents — no PII at risk). Required when corpus expands to include controlled documents such as System Security Plans or assessment reports. AWS Comprehend recommended as the production replacement for Presidio at scaled deployment. Tracked as GAP-003 in the AIIA.
+
+- **Langfuse trace scrubbing at source.** Current traces capture pre-scrubbed content (the query is scrubbed before retrieval and tracing both fire), so PII does not enter the trace. The remaining concern is Langfuse Cloud as an external storage destination — addressed by self-hosted Langfuse inside a private VPC for production. LANGFUSE_HOST environment variable controls the switch with no application code change required. Tracked as GAP-004 in the AIIA.
+
+See [`decision_log.md`](decision_log.md) DL-017 for the domain allowlist derivation and control-ID regex design. See AIIA Section 4 for the full residual gap list.
 
 ### Production Enhancement — Full AWS Deployment
 
@@ -323,14 +334,14 @@ migration. Estimated additional Terraform: ~100 lines.
 
 Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
 index co-located in a single AWS boundary. One service, one IAM policy,
-one audit trail. Right-sized for this corpus (~5K chunks, <100K at scale).
+one audit trail. Right-sized for this corpus (~1,696 chunks, <100K at scale).
 
 **When to migrate away from pgvector:**
 At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
 outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
 peak load, or corpus crosses 1M chunks. Migration path: swap the vector
 store adapter only — retrieval interface is abstracted, application code
-does not change. See docs/decision_log.md DL-002.
+does not change. See [decision_log.md](decision_log.md) DL-002.
 
 **If corpus expands beyond current four documents:**
 Metadata filtering by source or impact level recommended — pgvector WHERE
@@ -351,16 +362,16 @@ here for completeness and interview discussion.
 ## Pipeline Stages
 
 Retrieval, reranking, and generation are deliberately separate stages.
-Step 4 outputs ranked chunks only — no LLM called yet. This boundary
-matters: if the right chunks are not in the top-10, nothing downstream
+The retrieval stage outputs ranked chunks only — no LLM called yet. This
+boundary matters: if the right chunks are not in the top-10, nothing downstream
 recovers it. Validate retrieval in isolation before proceeding to reranking.
 
 ```
-Retrieval (Step 4) → Reranking (Step 5) → Generation (Step 7)
+Retrieval → Reranking → Generation
 ```
 
 Both retrievers (semantic and hybrid) return identical chunk shape so
-reranking and RAGAs evaluation (Step 8) can swap between semantic-only
+reranking and RAGAs evaluation can swap between semantic-only
 and hybrid without downstream changes.
 
 **Retriever behavior by corpus:**
@@ -376,7 +387,7 @@ tuning in production; current default is hybrid-on for all queries.
 **Conversational memory boundary:** Within-session pronoun enrichment implemented —
 `enrich_query()` rewrites ambiguous follow-up queries via Bedrock Claude at
 temperature=0.0 before retrieval fires (DL-025). Cross-session persistence is the
-remaining gap — see Future Work in README.
+remaining gap — see [Future Work in README](../README.md#future-work).
 
 ---
 
@@ -390,6 +401,44 @@ RAGAs scores measured at three pipeline stages:
 | Hybrid retrieval (RRF) | Same metrics — delta vs baseline |
 | Hybrid + Cohere rerank | Same metrics — delta vs hybrid |
 
-Score progression table committed to README after Step 8.
+Score progression table committed to README.
 Golden dataset: 20-question architect-level Q&A set built after seeing real
-retrieval failures in Steps 3–5.
+retrieval failures during pipeline iteration.
+
+---
+
+## Repository Structure
+
+```
+trust-layer-rag/
+├── README.md                       Project overview and pipeline summary
+├── PORTFOLIO.md                    Portfolio-style narrative for hiring contexts
+├── ARTICLE.md                      Companion article — four observations
+├── LICENSE.md                      MIT
+├── app.py                          Streamlit chat UI
+├── pipeline.py                     End-to-end orchestrator
+├── config.py                       Centralized settings (env-driven)
+├── requirements.txt
+├── ingestion/                      download → parse → chunk → embed → validate
+├── retrieval/                      semantic, hybrid, query_enrichment, rerank
+├── generation/                     Bedrock converse() + Pydantic validation
+├── evaluation/                     ragas_eval, retrieval_diagnostics,
+│                                   guardrail_test, golden_dataset.json,
+│                                   label_chunks, pii_filter_test
+├── tracing/                        Langfuse client (span-per-stage)
+├── utils/                          pii_filter (Presidio + control-ID regex)
+├── infrastructure/                 Terraform — RDS, S3, IAM
+├── scripts/                        rds_start, rds_stop, run_worked_examples
+├── prompts/system_prompt.txt
+├── config/prompts.yaml
+├── db/setup.py                     pgvector extension + HNSW + GIN indexes
+├── .env.example
+├── .github/workflows/ci.yml
+└── docs/
+    ├── architecture.md             This file
+    ├── decision_log.md             DL-001 through DL-029 — full rationale
+    ├── evaluation_methodology.md   Three-layer eval methodology
+    ├── worked_examples.md          Rendered query → chunks → answer flows
+    ├── AIIA_FCIS_v1_0.pdf          AI Impact Assessment (governance artifact)
+    └── images/                     Architecture diagram + trace screenshots
+```
