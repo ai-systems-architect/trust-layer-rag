@@ -1,6 +1,8 @@
 # Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
 ![Visitor Count](https://api.visitorbadge.io/api/VisitorHit?user=ai-systems-architect&repo=trust-layer-rag&countColor=%23263759)
 
+Raghunath Devayajanam · May 2026
+
 ![Beyond Retrieval — Architecting the Trust Layer for Enterprise AI](docs/images/trust_layer_cover.png)
 
 *Four principles for building reliable, governed RAG systems. [Detailed pipeline architecture below.](#pipeline)*

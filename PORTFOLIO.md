@@ -47,6 +47,8 @@ frameworks a federal AI system must navigate from design through ATO.
   blockchain, and cryptocurrency queries declined via corpus grounding,
   not guardrails
 
+Full worked examples — query → enriched query → retrieved chunks → cited answer — in [docs/worked_examples.md](docs/worked_examples.md).
+
 ---
 
 ## Pipeline Architecture
@@ -99,6 +101,8 @@ other component — both retrievers return identical output shape.
 - `pipeline.py` — full orchestrator: PII scrub → input guardrail → query enrichment → classify → retrieve → rerank → generate
 - `utils/pii_filter.py` — Presidio scrub at query input and generated output
 - `app.py` — Streamlit chat interface with hybrid toggle, enriched query label, source citations, filter label, guardrail action, trace ID per response
+
+Per-stage rationale, code references, and design tradeoffs in [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -194,12 +198,13 @@ optimizing for it would require weakening compliance safety behavior or
 simplifying the evaluation questions, both of which reduce system
 integrity and evaluation validity.
 
+Full methodology — three evaluation layers, golden dataset construction, and scoring rationale — in [docs/evaluation_methodology.md](docs/evaluation_methodology.md).
+
 ---
 
 ## Key Architectural Decisions
 
-Full rationale with alternatives evaluated in `docs/decision_log.md`
-(DL-001 through DL-029).
+Full rationale with alternatives evaluated in [docs/decision_log.md](docs/decision_log.md) (DL-001 through DL-029).
 
 | Decision | Choice | Key rationale |
 |----------|--------|---------------|
