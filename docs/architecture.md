@@ -249,26 +249,6 @@ here for completeness and interview discussion.
 
 ---
 
-## Vector Store — Migration Trigger
-
-Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
-index co-located in a single AWS boundary. One service, one IAM policy,
-one audit trail. Right-sized for this corpus (~1,696 chunks, <100K at scale).
-
-**When to migrate away from pgvector:**
-At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
-outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
-peak load, or corpus crosses 1M chunks. Migration path: swap the vector
-store adapter only — retrieval interface is abstracted, application code
-does not change. See [decision_log.md](decision_log.md) DL-002.
-
-**If corpus expands beyond current four documents:**
-Metadata filtering by source or impact level recommended — pgvector WHERE
-clause pre-filter before HNSW search reduces candidate set and improves
-precision without schema changes.
-
----
-
 ## Evaluation Strategy
 
 Three independent evaluation layers, deliberately complementary: RAGAs measures
@@ -344,6 +324,62 @@ If compliance boundary is not a constraint, these replace pgvector entirely:
 | Pinecone | Non-regulated workloads, corpus > 1M vectors, simple API |
 | Weaviate Cloud | Multi-modal search, strong GraphQL API |
 | Qdrant Cloud | High-throughput retrieval, Rust-based performance |
+
+---
+
+## Production Operations
+
+Production deployment touches multiple sections of this document. Network topology changes are documented in [Network Architecture > Production Enhancement](#production-enhancement--full-aws-deployment). PII filtering production path is in [Security & Data Boundary > PII Filtering](#pii-filtering). Cost economics at production scale are in the [README Cost section](../README.md#cost). This section covers the remaining concerns: storage migration triggers, latency at scale, failure modes, and architectural assumptions that hold across the cost and volume range.
+
+### Vector Store — Migration Trigger
+
+Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
+index co-located in a single AWS boundary. One service, one IAM policy,
+one audit trail. Right-sized for this corpus (~1,696 chunks, <100K at scale).
+
+**When to migrate away from pgvector:**
+At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
+outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
+peak load, or corpus crosses 1M chunks. Migration path: swap the vector
+store adapter only — retrieval interface is abstracted, application code
+does not change. See [decision_log.md](decision_log.md) DL-002.
+
+**If corpus expands beyond current four documents:**
+Metadata filtering by source or impact level recommended — pgvector WHERE
+clause pre-filter before HNSW search reduces candidate set and improves
+precision without schema changes.
+
+### Latency Optimization Levers
+
+Generation dominates at ~90% of total query time. Three levers in order of impact:
+
+**Token streaming.** Stream Claude's output to the UI as tokens arrive. Total latency is unchanged (~8–13s for full response), but perceived latency drops to ~1–2s for the first visible content. Highest-impact UX improvement available without architectural changes.
+
+**Intent routing to Claude Haiku for simpler queries.** Most control-ID lookups don't need Sonnet. A rule-based or lightweight classifier ahead of generation routes "what does AC-6 require?" to Haiku, which generates 2–3× faster than Sonnet for short responses. Architect-level synthesis questions still route to Sonnet. The same lever serves both cost and latency. The query enrichment stage (DL-025) is the right insertion point — intent classification can run alongside pronoun resolution in the same Bedrock call.
+
+**Speculative parallelization of dense and sparse retrieval.** Currently sequential: dense → sparse → fuse → quality gate → rerank. Could parallelize dense and sparse in independent threads, fuse on completion. Saves approximately 50ms — not transformative but defensible at high query volumes.
+
+### Failure Modes at Scale
+
+**Bedrock rate limits.** Default Claude Sonnet TPM (tokens per minute) caps in us-east-1 are around 200K TPM. At 10K queries/month evenly distributed, this is fine. At burst loads or higher steady volume, request a TPM increase via AWS support — no code change required.
+
+**OpenAI embedding rate limits.** During corpus ingestion, `text-embedding-3-large` allows up to 5,000 RPM and 5M TPM by default. Re-ingesting the full 1,696-chunk corpus runs in seconds. Expanding to 100K chunks takes minutes within rate caps. Beyond that, batched ingestion with backoff (already handled by the OpenAI Python SDK) suffices.
+
+**HNSW query latency degradation.** pgvector HNSW P99 stays under 50ms at the current corpus size. At 100K chunks, P99 climbs toward 80–100ms depending on tuning of `ef_search`. The Vector Store migration trigger above fires at P99 > 100ms at peak load OR corpus exceeds 1M chunks.
+
+**Langfuse trace ingestion under burst.** Langfuse Cloud handles bursts well at portfolio scale. At production scale (10K+ queries/month), self-hosted Langfuse inside the AWS VPC handles the volume cleanly and addresses the boundary-disclosure gap (GAP-004 in AIIA). The `LANGFUSE_HOST` environment variable controls the switch with no application code change.
+
+**RDS connection pool exhaustion.** db.t3.micro saturates around 1,000 active queries per minute due to connection limits, not compute. Migration to db.t3.small handles 10K queries/month cleanly. db.r6g.large or larger for 100K+ queries/month. Cost details in the [README Cost section](../README.md#cost).
+
+### What Does Not Change at Scale
+
+Three architectural assumptions hold across the cost and volume range.
+
+The dual-guardrail pattern stays correct. Input guardrail cost (~$0.0008) is independent of pipeline complexity and saves the full pipeline cost on adversarial queries. The savings grow in absolute terms at scale, not shrink.
+
+The hybrid retrieval pattern stays correct. RRF fusion has no scaling penalty. Control-ID regex preservation matters more, not less, at scale because larger corpora have more candidates that could be confused without the explicit anchor.
+
+The capability boundary stays correct. The system describes what frameworks require regardless of query volume. Compliance assertions remain a human judgment, not an AI decision, at any scale.
 
 ---
 

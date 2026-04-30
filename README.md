@@ -454,6 +454,8 @@ This is expected and acceptable. This system is optimized for correctness, groun
 
 ## Cost
 
+### Current portfolio deployment
+
 | Component | Cost |
 |---|---|
 | One-time ingestion (OpenAI embeddings) | ~$0.07 |
@@ -462,6 +464,36 @@ This is expected and acceptable. This system is optimized for correctness, groun
 | Langfuse, Streamlit Community Cloud | $0 |
 
 RDS is provisioned on demand — tear down when not actively building (~$2/day active).
+
+### Cost at production scale
+
+Per-query cost (~$0.008–0.028) is volume-linear. RDS scales as a separate fixed-cost dimension. Approximate monthly costs:
+
+| Volume | Per-query (avg) | Variable (queries) | Fixed (RDS) | Approximate total |
+|---|---|---|---|---|
+| Portfolio demo (~50/month) | ~$0.018 | ~$0.90 | ~$13 | ~$17–20 |
+| Light production (~1K/month) | ~$0.018 | ~$18 | ~$13 | ~$30–35 |
+| Steady production (~10K/month) | ~$0.018 | ~$180 | ~$50 (db.t3.small) | ~$230 |
+| High-volume (~100K/month) | ~$0.012 (intent routing) | ~$1,200 | ~$200 (db.r6g.large) | ~$1,400 |
+
+**Assumptions.** Production-tier RDS estimates assume Multi-AZ deployment for SLA reliability — halve for single-AZ dev/staging. The high-volume per-query figure assumes ~50% of queries are control-ID lookups routable to Claude Haiku via intent classification (see lever 1 below).
+
+**Excluded from totals above.** Production deployment beyond the portfolio tier adds:
+- **NAT Gateway** (~$33/month + data transfer) — required when Streamlit moves into a private VPC per the architecture migration path
+- **Langfuse Cloud beyond free tier** (~$50/month at 10K queries/month volume) — or self-hosted Langfuse on the same VPC at compute cost only
+- **VPC endpoints for Bedrock and S3** (~$15/month per endpoint) — eliminates NAT charges for AWS-internal traffic
+
+See [Network Architecture](docs/architecture.md#network-architecture) for the full production topology.
+
+### Cost optimization levers at scale
+
+Two levers in order of impact when per-query cost matters:
+
+1. **Intent routing to Claude Haiku** for simpler queries. Control-ID lookups don't need Sonnet; a lightweight classifier ahead of generation routes them to Haiku at ~$0.001/query vs Sonnet's $0.005–0.025. At a ~50% Haiku / ~50% Sonnet split, the routed subset drops ~80%+ per query and overall generation cost drops ~30%.
+
+2. **Batch inference for non-realtime workloads.** Bedrock batch inference is ~50% discount. Useful for re-ingestion, evaluation runs, or any workflow that doesn't need realtime response — does not apply to user-facing chat queries.
+
+Vector store migration (pgvector → Qdrant) is triggered by corpus size or HNSW latency, not query volume — see [docs/architecture.md](docs/architecture.md#vector-store--migration-trigger). At 1M+ chunks or P99 query latency over 100ms at peak, migration becomes the right call.
 
 ---
 
