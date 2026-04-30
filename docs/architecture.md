@@ -98,6 +98,8 @@ User Query
 
 The diagram above shows the stage sequence. The per-stage notes below capture the implementation choices that aren't visible in the diagram — bypass logic, threshold derivation, allowlist composition, and validation patterns.
 
+Stages are deliberately separated. Retrieval outputs ranked chunks only — no LLM is called yet. If the right chunks are not in the top-10, nothing downstream recovers. This boundary makes retrieval validatable in isolation, before reranking and generation ever run.
+
 #### PII Scrub
 
 Presidio `en_core_web_lg` scans the raw query before any external service call and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the generated answer before returning to the caller — catches query PII echoed in the response.
@@ -113,6 +115,8 @@ Bedrock Guardrails `apply_guardrail` API checks the raw query before any retriev
 Resolves pronouns and ambiguous references in follow-up queries using recent conversation context before the embedding call. "How does that relate to least privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?" — the retriever embeds a fully specified query.
 
 Claude via Bedrock at `temperature=0.0` rewrites the query deterministically. Bypassed on first turn, long queries (8+ words), and queries with no ambiguous pronouns — adds ~150ms only on triggered queries. Rewrite visible in app UI and Langfuse trace. Implementation: `retrieval/query_enrichment.py`. See DL-025.
+
+**Conversational memory boundary.** Within-session enrichment is implemented; cross-session persistence is the remaining gap — see [Future Work in README](../README.md#future-work).
 
 #### Classify
 
@@ -131,6 +135,8 @@ Each chunk carries two metadata columns that the Classify stage uses as pre-filt
 Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal Rank Fusion (k=60). Returns up to top-10 chunks.
 
 NIST 800-53 control identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is applied — control IDs always reach the sparse index as high-value anchor terms regardless of query length. Implementation: `retrieval/hybrid.py`. See DL-008, DL-019.
+
+**Retriever behavior by corpus.** BM25 fires productively on NIST 800-53 and FedRAMP queries where control identifiers (AC-6, IR-4, SC-28) and technical terms produce distinctive tokens. AI RMF and AI 600-1 governance language (govern, measure, trustworthy) does not survive stop-word stripping as useful BM25 anchors — hybrid falls back to dense-only on those queries. Both retrievers return identical chunk shape, so reranking and RAGAs evaluation can swap configurations without downstream changes. The `use_hybrid` flag enables per-query tuning; current default is hybrid-on for all queries.
 
 #### Post-RRF Quality Gate
 
@@ -179,28 +185,6 @@ Full methodology in [`evaluation_methodology.md`](evaluation_methodology.md). Se
 
 ---
 
-## Security Boundary
-
-**Current portfolio deployment:** RDS has a public endpoint (required for
-Streamlit Community Cloud on GCP — see DL-015). SSL enforced via
-rds.force_ssl=1. Corpus is public NIST documents — no sensitive data at risk.
-
-**Data that leaves AWS in current deployment:**
-- OpenAI text-embedding-3-large — query text sent to OpenAI at embed time
-- Cohere rerank-english-v3.0 — top-10 chunks sent to Cohere at rerank time
-- Langfuse Cloud (us.cloud.langfuse.com) — pipeline traces including query text
-
-**Data that stays in AWS:**
-- pgvector on RDS — all embeddings and corpus chunks
-- Amazon Bedrock — generation stays within AWS managed boundary
-- S3 — raw PDFs and processed chunks
-
-**Production path:** Move Streamlit inside AWS (ECS Fargate, private subnet),
-remove public RDS endpoint, swap OpenAI for Titan embed and Cohere for Bedrock
-rerank — full AWS boundary achieved. See Network Architecture section below.
-
----
-
 ## Provider Abstraction
 
 Embedding and generation providers are swappable via environment variable
@@ -215,7 +199,159 @@ Bedrock Guardrails is the only hard AWS dependency by design.
 
 ---
 
-## Cloud Equivalents
+## Security & Data Boundary
+
+### AWS boundary — current portfolio deployment
+
+RDS has a public endpoint (required for Streamlit Community Cloud on GCP — see DL-015). SSL enforced via `rds.force_ssl=1`. Corpus is public NIST documents — no sensitive data at risk.
+
+**Data that leaves AWS in current deployment:**
+- OpenAI text-embedding-3-large — query text sent to OpenAI at embed time
+- Cohere rerank-english-v3.0 — top-10 chunks sent to Cohere at rerank time
+- Langfuse Cloud (us.cloud.langfuse.com) — pipeline traces including query text
+
+**Data that stays in AWS:**
+- pgvector on RDS — all embeddings and corpus chunks
+- Amazon Bedrock — generation stays within AWS managed boundary
+- S3 — raw PDFs and processed chunks
+
+**Production path:** Move Streamlit inside AWS (ECS Fargate, private subnet), remove public RDS endpoint, swap OpenAI for Titan embed and Cohere for Bedrock rerank — full AWS boundary achieved. See [Network Architecture](#network-architecture) below.
+
+### PII Filtering
+
+PII filtering is implemented at two of four layers and deliberately deferred at the remaining two, with the deferral rationale documented per layer.
+
+**Implemented layers:**
+
+- **Query input scrub.** Presidio en_core_web_lg runs on the raw query before any external service call (OpenAI, Cohere, Langfuse, Bedrock). A domain allowlist (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a control-ID regex post-filter prevent false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names. See `utils/pii_filter.py`.
+
+- **Generated output scrub.** A second Presidio pass runs on Claude's response before returning to the caller. Catches query PII echoed in the answer. Defense-in-depth pattern — output scrub catches what the input scrub may have missed.
+
+**Deferred layers (with documented rationale):**
+
+- **Corpus ingestion scrub.** Implementation hook exists in `utils/pii_filter.py` but is not wired into the ingestion pipeline. Not required for the current corpus (public NIST documents — no PII at risk). Required when corpus expands to include controlled documents such as System Security Plans or assessment reports. AWS Comprehend recommended as the production replacement for Presidio at scaled deployment. Tracked as GAP-003 in the AIIA.
+
+- **Langfuse trace scrubbing at source.** Current traces capture pre-scrubbed content (the query is scrubbed before retrieval and tracing both fire), so PII does not enter the trace. The remaining concern is Langfuse Cloud as an external storage destination — addressed by self-hosted Langfuse inside a private VPC for production. LANGFUSE_HOST environment variable controls the switch with no application code change required. Tracked as GAP-004 in the AIIA.
+
+See [`decision_log.md`](decision_log.md) DL-017 for the domain allowlist derivation and control-ID regex design. See AIIA Section 4 for the full residual gap list.
+
+---
+
+## Network Architecture
+
+### Current — Portfolio Deployment
+
+```
+User Browser
+↓
+Streamlit Community Cloud (GCP us-central1) — free tier
+↓ SSL/TLS over public internet
+RDS PostgreSQL (AWS us-east-1) — public endpoint
+↓ private
+pgvector index + compliance corpus
+```
+
+Streamlit Community Cloud runs on Google Cloud Platform — outside
+AWS entirely. RDS requires a public endpoint to accept connections
+from Streamlit. Security enforced via SSL (rds.force_ssl=1) and
+strong password. Default VPC used — dedicated VPC adds complexity
+without security benefit given public endpoint requirement.
+Corpus is public NIST documents — no sensitive data.
+See [decision_log.md](decision_log.md) DL-015.
+
+### Production Enhancement — Full AWS Deployment
+
+Moving to production requires relocating the application layer
+inside AWS to eliminate the public RDS endpoint:
+
+```
+User Browser
+↓
+AWS Application Load Balancer (public subnet)
+↓
+ECS Fargate — Streamlit app (private subnet)
+↓ VPC internal only
+RDS PostgreSQL (private subnet) — no public endpoint
+```
+
+**Changes required:**
+- Dedicated VPC with public and private subnets across two AZs
+- ECS Fargate or EC2 for Streamlit in private subnet
+- Application Load Balancer in public subnet
+- RDS moves to private subnet — publicly_accessible = false
+- Security group: RDS accepts port 5432 from app security group only
+- SSM Session Manager for developer access — no bastion EC2 needed
+- No NAT Gateway required if Bedrock accessed via VPC endpoint
+
+**Terraform impact:**
+Application connection string does not change — only infrastructure
+topology changes. Terraform modules are structured to support this
+migration. Estimated additional Terraform: ~100 lines.
+
+### Why Not Dedicated VPC Now
+
+Dedicated VPC only provides meaningful security when the application
+layer is co-located inside AWS. With Streamlit on GCP, a dedicated
+VPC with public RDS has identical security posture to default VPC
+with public RDS — same exposure, more Terraform code. The production
+enhancement above is the architecturally correct path — documented
+here for completeness and interview discussion.
+
+---
+
+## Vector Store — Migration Trigger
+
+Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
+index co-located in a single AWS boundary. One service, one IAM policy,
+one audit trail. Right-sized for this corpus (~1,696 chunks, <100K at scale).
+
+**When to migrate away from pgvector:**
+At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
+outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
+peak load, or corpus crosses 1M chunks. Migration path: swap the vector
+store adapter only — retrieval interface is abstracted, application code
+does not change. See [decision_log.md](decision_log.md) DL-002.
+
+**If corpus expands beyond current four documents:**
+Metadata filtering by source or impact level recommended — pgvector WHERE
+clause pre-filter before HNSW search reduces candidate set and improves
+precision without schema changes.
+
+---
+
+## Evaluation Strategy
+
+Three independent evaluation layers, deliberately complementary: RAGAs measures
+end-to-end answer quality, retrieval diagnostics isolate retrieval signal from
+generation, and adversarial evaluation validates refusal behavior on out-of-scope
+queries. A failure in any one layer is diagnostic — RAGAs alone can mask a
+retrieval regression; retrieval diagnostics alone can mask a generation failure.
+
+**Why a 20-question architect-level golden set, not synthetic reference answers.**
+Questions were authored after observing real retrieval failures during pipeline
+iteration. Architect-level multi-part questions surface failure modes that
+machine-generated reference questions miss.
+
+**Why Answer Correctness is excluded.** Faithfulness and Context Precision are
+stronger signals when the corpus is the source of truth and reference answers
+do not exist. LLM-as-judge correctness on architect-level multi-part questions
+is noisy. See [decision_log.md](decision_log.md) DL-028.
+
+**Why three retrieval configurations are measured in the same run.** Reporting
+semantic-only, hybrid, and hybrid+rerank as deltas in a single evaluation
+quantifies each retrieval addition rather than asserting an absolute number.
+Score progression in [README](../README.md#evaluation-results); full methodology
+and metric rationale in [`evaluation_methodology.md`](evaluation_methodology.md).
+See DL-009, DL-021, DL-028.
+
+---
+
+## Cloud Portability
+
+The implementation runs on AWS today, but the architecture is portable. The
+component stack maps cleanly onto GCP and Azure equivalents — and pgvector
+can be replaced entirely by a managed vector DB if the single-boundary
+constraint relaxes.
 
 ### GCP Stack
 
@@ -258,163 +394,6 @@ If compliance boundary is not a constraint, these replace pgvector entirely:
 | Pinecone | Non-regulated workloads, corpus > 1M vectors, simple API |
 | Weaviate Cloud | Multi-modal search, strong GraphQL API |
 | Qdrant Cloud | High-throughput retrieval, Rust-based performance |
-
----
-
-## Network Architecture
-
-### Current — Portfolio Deployment
-
-```
-User Browser
-↓
-Streamlit Community Cloud (GCP us-central1) — free tier
-↓ SSL/TLS over public internet
-RDS PostgreSQL (AWS us-east-1) — public endpoint
-↓ private
-pgvector index + compliance corpus
-```
-
-Streamlit Community Cloud runs on Google Cloud Platform — outside
-AWS entirely. RDS requires a public endpoint to accept connections
-from Streamlit. Security enforced via SSL (rds.force_ssl=1) and
-strong password. Default VPC used — dedicated VPC adds complexity
-without security benefit given public endpoint requirement.
-Corpus is public NIST documents — no sensitive data.
-See [decision_log.md](decision_log.md) DL-015.
-
-### PII Filtering
-
-PII filtering is implemented at two of four layers and deliberately deferred at the remaining two, with the deferral rationale documented per layer.
-
-**Implemented layers:**
-
-- **Query input scrub.** Presidio en_core_web_lg runs on the raw query before any external service call (OpenAI, Cohere, Langfuse, Bedrock). A domain allowlist (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a control-ID regex post-filter prevent false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names. See `utils/pii_filter.py`.
-
-- **Generated output scrub.** A second Presidio pass runs on Claude's response before returning to the caller. Catches query PII echoed in the answer. Defense-in-depth pattern — output scrub catches what the input scrub may have missed.
-
-**Deferred layers (with documented rationale):**
-
-- **Corpus ingestion scrub.** Implementation hook exists in `utils/pii_filter.py` but is not wired into the ingestion pipeline. Not required for the current corpus (public NIST documents — no PII at risk). Required when corpus expands to include controlled documents such as System Security Plans or assessment reports. AWS Comprehend recommended as the production replacement for Presidio at scaled deployment. Tracked as GAP-003 in the AIIA.
-
-- **Langfuse trace scrubbing at source.** Current traces capture pre-scrubbed content (the query is scrubbed before retrieval and tracing both fire), so PII does not enter the trace. The remaining concern is Langfuse Cloud as an external storage destination — addressed by self-hosted Langfuse inside a private VPC for production. LANGFUSE_HOST environment variable controls the switch with no application code change required. Tracked as GAP-004 in the AIIA.
-
-See [`decision_log.md`](decision_log.md) DL-017 for the domain allowlist derivation and control-ID regex design. See AIIA Section 4 for the full residual gap list.
-
-### Production Enhancement — Full AWS Deployment
-
-Moving to production requires relocating the application layer
-inside AWS to eliminate the public RDS endpoint:
-
-```
-User Browser
-↓
-AWS Application Load Balancer (public subnet)
-↓
-ECS Fargate — Streamlit app (private subnet)
-↓ VPC internal only
-RDS PostgreSQL (private subnet) — no public endpoint
-```
-
-**Changes required:**
-- Dedicated VPC with public and private subnets across two AZs
-- ECS Fargate or EC2 for Streamlit in private subnet
-- Application Load Balancer in public subnet
-- RDS moves to private subnet — publicly_accessible = false
-- Security group: RDS accepts port 5432 from app security group only
-- SSM Session Manager for developer access — no bastion EC2 needed
-- No NAT Gateway required if Bedrock accessed via VPC endpoint
-
-**Terraform impact:**
-Application connection string does not change — only infrastructure
-topology changes. Terraform modules are structured to support this
-migration. Estimated additional Terraform: ~100 lines.
-
-### Vector Store — Current Choice and Migration Trigger
-
-Vector store: pgvector on RDS — embeddings, metadata, and BM25 sparse
-index co-located in a single AWS boundary. One service, one IAM policy,
-one audit trail. Right-sized for this corpus (~1,696 chunks, <100K at scale).
-
-**When to migrate away from pgvector:**
-At 10M+ vectors or sub-10ms P99 latency requirements, Qdrant self-hosted
-outperforms meaningfully. Trigger: HNSW query latency exceeds 100ms at
-peak load, or corpus crosses 1M chunks. Migration path: swap the vector
-store adapter only — retrieval interface is abstracted, application code
-does not change. See [decision_log.md](decision_log.md) DL-002.
-
-**If corpus expands beyond current four documents:**
-Metadata filtering by source or impact level recommended — pgvector WHERE
-clause pre-filter before HNSW search reduces candidate set and improves
-precision without schema changes.
-
-### Why Not Dedicated VPC Now
-
-Dedicated VPC only provides meaningful security when the application
-layer is co-located inside AWS. With Streamlit on GCP, a dedicated
-VPC with public RDS has identical security posture to default VPC
-with public RDS — same exposure, more Terraform code. The production
-enhancement above is the architecturally correct path — documented
-here for completeness and interview discussion.
-
----
-
-## Pipeline Stages
-
-Retrieval, reranking, and generation are deliberately separate stages.
-The retrieval stage outputs ranked chunks only — no LLM called yet. This
-boundary matters: if the right chunks are not in the top-10, nothing downstream
-recovers it. Validate retrieval in isolation before proceeding to reranking.
-
-```
-Retrieval → Reranking → Generation
-```
-
-Both retrievers (semantic and hybrid) return identical chunk shape so
-reranking and RAGAs evaluation can swap between semantic-only
-and hybrid without downstream changes.
-
-**Retriever behavior by corpus:**
-BM25 sparse retrieval fires on NIST 800-53 and FedRAMP queries where
-exact control identifiers (AC-6, IR-4, SC-28) and technical terms
-produce distinctive tokens. For AI RMF and AI 600-1 queries, governance
-language (govern, measure, trustworthy) does not survive stop word
-stripping as useful BM25 anchors — hybrid falls back to dense-only for
-these queries. Dense retrieval handles abstract governance language well
-through embedding space similarity. The use_hybrid flag allows per-query
-tuning in production; current default is hybrid-on for all queries.
-
-**Conversational memory boundary:** Within-session pronoun enrichment implemented —
-`enrich_query()` rewrites ambiguous follow-up queries via Bedrock Claude at
-temperature=0.0 before retrieval fires (DL-025). Cross-session persistence is the
-remaining gap — see [Future Work in README](../README.md#future-work).
-
----
-
-## Evaluation Strategy
-
-Three independent evaluation layers, deliberately complementary: RAGAs measures
-end-to-end answer quality, retrieval diagnostics isolate retrieval signal from
-generation, and adversarial evaluation validates refusal behavior on out-of-scope
-queries. A failure in any one layer is diagnostic — RAGAs alone can mask a
-retrieval regression; retrieval diagnostics alone can mask a generation failure.
-
-**Why a 20-question architect-level golden set, not synthetic reference answers.**
-Questions were authored after observing real retrieval failures during pipeline
-iteration. Architect-level multi-part questions surface failure modes that
-machine-generated reference questions miss.
-
-**Why Answer Correctness is excluded.** Faithfulness and Context Precision are
-stronger signals when the corpus is the source of truth and reference answers
-do not exist. LLM-as-judge correctness on architect-level multi-part questions
-is noisy. See [decision_log.md](decision_log.md) DL-028.
-
-**Why three retrieval configurations are measured in the same run.** Reporting
-semantic-only, hybrid, and hybrid+rerank as deltas in a single evaluation
-quantifies each retrieval addition rather than asserting an absolute number.
-Score progression in [README](../README.md#evaluation-results); full methodology
-and metric rationale in [`evaluation_methodology.md`](evaluation_methodology.md).
-See DL-009, DL-021, DL-028.
 
 ---
 
