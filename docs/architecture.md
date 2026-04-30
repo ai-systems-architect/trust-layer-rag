@@ -1,4 +1,4 @@
-# Architecture — Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
+# Architecture — The Trust Layer for Enterprise AI
 
 High-level system design. For why each component was chosen over alternatives,
 see [decision_log.md](decision_log.md).
@@ -96,73 +96,23 @@ User Query
 
 ### Per-Stage Implementation Detail
 
-The diagram above shows the stage sequence. The per-stage notes below capture the implementation choices that aren't visible in the diagram — bypass logic, threshold derivation, allowlist composition, and validation patterns.
+The diagram above shows the stage sequence. The table below captures implementation choices not visible in the diagram — bypass logic, threshold derivation, allowlist composition, validation patterns. Stages are deliberately separated: retrieval outputs ranked chunks only, no LLM is called until generation. If the right chunks are not in the top-10, nothing downstream recovers — this boundary makes retrieval validatable in isolation.
 
-Stages are deliberately separated. Retrieval outputs ranked chunks only — no LLM is called yet. If the right chunks are not in the top-10, nothing downstream recovers. This boundary makes retrieval validatable in isolation, before reranking and generation ever run.
+| # | Stage | Implementation detail | Files | DL |
+|---|---|---|---|---|
+| 1 | PII Scrub | Presidio `en_core_web_lg` scans the raw query before any external service call (OpenAI, Cohere, Langfuse, Bedrock) and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the generated answer before returning to the caller — catches query PII echoed in the response. A `_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO + 16 other federal terms — 20 total) and a control-ID regex post-filter prevent federal acronyms and NIST identifiers (AC-2, IR-4) from being misclassified as PERSON entities by the NER model. | `utils/pii_filter.py` | DL-017 |
+| 2 | Input Guardrail | Bedrock Guardrails `apply_guardrail` API checks the raw query before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak patterns with no downstream token cost. Cost: one Bedrock call (~50ms, ~$0.0008) versus the full pipeline cost on adversarial queries. | — | DL-022 |
+| 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` rewrites pronouns and ambiguous references in follow-up queries deterministically, using recent conversation context before the embedding call. Example: "How does that relate to least privilege?" → "How does AC-6 relate to least privilege in NIST 800-53?" — the retriever embeds a fully specified query. Bypassed on first turn, long queries (8+ words), and queries with no ambiguous pronouns — adds ~150ms only on triggered queries. Rewrite visible in app UI and Langfuse trace. | `retrieval/query_enrichment.py` | DL-025 |
+| 4 | Classify | Rule-based regex classifier infers metadata pre-filters from the enriched query text. Queries containing NIST 800-53 control IDs (e.g., AC-2, IR-4) resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger filters even when the original query used a pronoun. Empirical impact: AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction) before HNSW search runs. | `pipeline.py` | DL-023 |
+| 5 | Ingestion | NIST 800-53, AI RMF, and AI 600-1 ingest as PDFs via PyMuPDF; FedRAMP Moderate ingests as `.docx` converted to PDF via LibreOffice headless before extraction. Text chunked with tiktoken `cl100k_base` at 600 tokens / 100-token overlap, then embedded via OpenAI `text-embedding-3-large` at 1536 dims (Matryoshka truncation from 3072). Chunks land in pgvector on RDS with HNSW cosine index for dense retrieval and a GIN tsvector index for BM25. Each chunk carries two metadata columns used by Stage 4: `control_family` (NIST 800-53 family prefix, regex-extracted from chunk text) and `impact_level` (FedRAMP impact, source-derived) — these columns are why metadata-aware retrieval can reduce the 1,696-chunk corpus to a relevant subset before HNSW search runs. | — | DL-007, DL-016, DL-018 |
+| 6 | Retrieval | Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal Rank Fusion (k=60). Returns up to top-10 chunks. NIST 800-53 control identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is applied — control IDs always reach the sparse index as high-value anchor terms regardless of query length. **Retriever behavior by corpus:** BM25 fires productively on NIST 800-53 and FedRAMP queries where control identifiers (AC-6, IR-4, SC-28) and technical terms produce distinctive tokens. AI RMF and AI 600-1 governance language (govern, measure, trustworthy) does not survive stop-word stripping as useful BM25 anchors — hybrid falls back to dense-only on those queries. Both retrievers return identical chunk shape, so reranking and RAGAs evaluation can swap configurations without downstream changes. The `use_hybrid` flag enables per-query tuning; current default is hybrid-on for all queries. | `retrieval/hybrid.py` | DL-008, DL-019 |
+| 7 | Post-RRF Quality Gate | Candidates below `MIN_RRF_SCORE = 0.0150` are dropped before Cohere sees them. RRF produces a ranked list regardless of absolute match quality — the gate stops weak candidates from consuming rerank quota. Safety floor of 3 candidates guaranteed. Threshold derived from empirical score distribution across 7 representative query types: 6–10 candidates pass per query, average 8.1 of 10; safety floor triggered on 0 of 7 queries. Threshold 0.0150 was set from first principles — the commonly cited 0.008 does not apply when k=60, because the theoretical minimum RRF score with top_k=10 is 1/(60+10) = 0.0143, making anything below that a no-op. | — | DL-024 |
+| 8 | Reranking | Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly against the query. Returns top-5. | `retrieval/rerank.py` | DL-005 |
+| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Amazon Bedrock. Generation and output guardrail run in a single `converse()` call with `guardrailConfig` attached — Bedrock generates the response and applies the guardrail in one operation. The guardrail catches overclaiming beyond retrieved context, compliance status assertions, and misconduct. The combined Bedrock response is validated with Pydantic — `GenerateResponse` model enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before the result returns to the pipeline. Malformed or truncated responses are rejected. | `generation/generate.py` | DL-004, DL-022 |
 
-#### PII Scrub
+**Conversational memory boundary.** Within-session pronoun enrichment (Stage 3) is implemented; cross-session persistence is the remaining gap — see [Future Work in README](../README.md#future-work).
 
-Presidio `en_core_web_lg` scans the raw query before any external service call and replaces detected entities (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS, and others) with bracketed type placeholders. A second pass runs on the generated answer before returning to the caller — catches query PII echoed in the response.
-
-A `_DOMAIN_ALLOWLIST` (FedRAMP, NIST, AWS, ISSO, and 16 other federal terms) and a control ID regex prevent federal acronyms and NIST identifiers (AC-2, IR-4) from being misclassified as PERSON entities by the NER model. Implementation: `utils/pii_filter.py`. See DL-017.
-
-#### Input Guardrail
-
-Bedrock Guardrails `apply_guardrail` API checks the raw query before any retrieval runs. Blocks prompt injection, off-topic queries, and jailbreak patterns with no downstream token cost. Cost: one Bedrock call (~50ms, ~$0.0008) versus the full pipeline cost on adversarial queries. See DL-022.
-
-#### Query Enrichment
-
-Resolves pronouns and ambiguous references in follow-up queries using recent conversation context before the embedding call. "How does that relate to least privilege?" becomes "How does AC-6 relate to least privilege in NIST 800-53?" — the retriever embeds a fully specified query.
-
-Claude via Bedrock at `temperature=0.0` rewrites the query deterministically. Bypassed on first turn, long queries (8+ words), and queries with no ambiguous pronouns — adds ~150ms only on triggered queries. Rewrite visible in app UI and Langfuse trace. Implementation: `retrieval/query_enrichment.py`. See DL-025.
-
-**Conversational memory boundary.** Within-session enrichment is implemented; cross-session persistence is the remaining gap — see [Future Work in README](../README.md#future-work).
-
-#### Classify
-
-Rule-based query classifier infers metadata pre-filters from the enriched query text. Queries containing NIST 800-53 control IDs (e.g., AC-2, IR-4) resolve to a `control_family` filter; queries mentioning FedRAMP Moderate resolve to an `impact_level` filter. Runs on the enriched query so resolved control IDs trigger the filter even when the original query used a pronoun.
-
-Empirical impact: AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction) before HNSW search runs. Implementation: `pipeline.py`. See DL-023.
-
-#### Ingestion
-
-NIST 800-53, AI RMF, and AI 600-1 ingest as PDFs via PyMuPDF; FedRAMP Moderate ingests as `.docx` converted to PDF via LibreOffice headless before extraction. Text is chunked with tiktoken `cl100k_base` at 600 tokens with 100-token overlap, then embedded via OpenAI `text-embedding-3-large` at 1536 dims (Matryoshka truncation from 3072). Chunks land in pgvector on RDS with HNSW cosine index for dense retrieval and a GIN tsvector index for BM25.
-
-Each chunk carries two metadata columns that the Classify stage uses as pre-filters: `control_family` (NIST 800-53 family prefix, extracted from chunk text via regex) and `impact_level` (FedRAMP impact, source-derived). These columns are the reason metadata-aware retrieval can reduce the 1,696-chunk corpus to a relevant subset before HNSW search runs. See DL-007, DL-016, DL-018.
-
-#### Retrieval
-
-Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) search fused via Reciprocal Rank Fusion (k=60). Returns up to top-10 chunks.
-
-NIST 800-53 control identifiers (AC-2, IR-4) are pre-extracted from the query via regex before BM25's 5-term limit is applied — control IDs always reach the sparse index as high-value anchor terms regardless of query length. Implementation: `retrieval/hybrid.py`. See DL-008, DL-019.
-
-**Retriever behavior by corpus.** BM25 fires productively on NIST 800-53 and FedRAMP queries where control identifiers (AC-6, IR-4, SC-28) and technical terms produce distinctive tokens. AI RMF and AI 600-1 governance language (govern, measure, trustworthy) does not survive stop-word stripping as useful BM25 anchors — hybrid falls back to dense-only on those queries. Both retrievers return identical chunk shape, so reranking and RAGAs evaluation can swap configurations without downstream changes. The `use_hybrid` flag enables per-query tuning; current default is hybrid-on for all queries.
-
-#### Post-RRF Quality Gate
-
-Candidates below `MIN_RRF_SCORE = 0.0150` are dropped before Cohere sees them. RRF produces a ranked list regardless of absolute match quality — the gate stops weak candidates from consuming rerank quota. Safety floor of 3 candidates guaranteed.
-
-Threshold derived from empirical score distribution across 7 representative query types: 6–10 candidates pass per query, average 8.1 of 10; safety floor triggered on 0 of 7 queries. Threshold 0.0150 was set from first principles — the commonly cited 0.008 does not apply when k=60, because the theoretical minimum RRF score with top_k=10 is 1/(60+10) = 0.0143, making anything below that a no-op. See DL-024.
-
-#### Reranking
-
-Cohere rerank-english-v3.0 cross-encoder scores the filtered candidate set jointly against the query. Returns top-5. Implementation: `retrieval/rerank.py`. See DL-005.
-
-#### Generation with Output Guardrail
-
-Claude Sonnet 4.5 via Amazon Bedrock. Generation and output guardrail run in a single `converse()` call with `guardrailConfig` attached — Bedrock generates the response and applies the guardrail in one operation. The guardrail catches overclaiming beyond retrieved context, compliance status assertions, and misconduct.
-
-The combined Bedrock response is validated with Pydantic — `GenerateResponse` model enforces `answer`, `model`, `stop_reason`, and `guardrail_action` fields before the result returns to the pipeline. Malformed or truncated responses are rejected. Implementation: `generation/generate.py`. See DL-004, DL-022.
-
-#### Evaluation (offline)
-
-Three independent evaluation layers run against the golden dataset:
-
-- **RAGAs** scores answer quality (Faithfulness, Context Precision, Context Recall, Answer Relevancy) across semantic and hybrid retrieval configurations.
-- **Retrieval diagnostics** score retrieval in isolation (Recall@k, MRR, nDCG across semantic, hybrid, and hybrid+rerank).
-- **Adversarial guardrail evaluation** (`evaluation/guardrail_test.py`) runs the five negative test cases through the full pipeline and verifies correct refusal behavior — two-signal pass detection: hard guardrail block or hedge phrase in the generated answer.
-
-Full methodology in [`evaluation_methodology.md`](evaluation_methodology.md). See DL-009, DL-021, DL-028.
+For full per-stage design tradeoffs and rejected alternatives, see [`decision_log.md`](decision_log.md). Evaluation methodology and results are in `## Evaluation Strategy` below.
 
 ---
 

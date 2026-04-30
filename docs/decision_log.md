@@ -1,4 +1,4 @@
-# Decision Log — Beyond Retrieval: Architecting the Trust Layer for Enterprise AI
+# Decision Log — The Trust Layer for Enterprise AI
 
 All architectural decisions recorded here. Format: decision made, rationale,
 alternatives evaluated. Referenced from config.py via DL-XXX pointers.
