@@ -393,17 +393,28 @@ remaining gap — see [Future Work in README](../README.md#future-work).
 
 ## Evaluation Strategy
 
-RAGAs scores measured at three pipeline stages:
+Three independent evaluation layers, deliberately complementary: RAGAs measures
+end-to-end answer quality, retrieval diagnostics isolate retrieval signal from
+generation, and adversarial evaluation validates refusal behavior on out-of-scope
+queries. A failure in any one layer is diagnostic — RAGAs alone can mask a
+retrieval regression; retrieval diagnostics alone can mask a generation failure.
 
-| Stage | Metrics |
-|---|---|
-| Dense-only baseline | Faithfulness, Context Precision, Context Recall, Answer Relevancy |
-| Hybrid retrieval (RRF) | Same metrics — delta vs baseline |
-| Hybrid + Cohere rerank | Same metrics — delta vs hybrid |
+**Why a 20-question architect-level golden set, not synthetic reference answers.**
+Questions were authored after observing real retrieval failures during pipeline
+iteration. Architect-level multi-part questions surface failure modes that
+machine-generated reference questions miss.
 
-Score progression table committed to README.
-Golden dataset: 20-question architect-level Q&A set built after seeing real
-retrieval failures during pipeline iteration.
+**Why Answer Correctness is excluded.** Faithfulness and Context Precision are
+stronger signals when the corpus is the source of truth and reference answers
+do not exist. LLM-as-judge correctness on architect-level multi-part questions
+is noisy. See [decision_log.md](decision_log.md) DL-028.
+
+**Why three retrieval configurations are measured in the same run.** Reporting
+semantic-only, hybrid, and hybrid+rerank as deltas in a single evaluation
+quantifies each retrieval addition rather than asserting an absolute number.
+Score progression in [README](../README.md#evaluation-results); full methodology
+and metric rationale in [`evaluation_methodology.md`](evaluation_methodology.md).
+See DL-009, DL-021, DL-028.
 
 ---
 
