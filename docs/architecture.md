@@ -329,6 +329,8 @@ If compliance boundary is not a constraint, these replace pgvector entirely:
 
 ## Production Operations
 
+This section documents how the architecture would evolve under production load. The current portfolio deployment runs at demo scale; the analysis below identifies migration triggers, optimization levers, and failure modes that become relevant at production volumes — answering the "how would this scale" question directly rather than implying that scaling has already been engineered.
+
 Production deployment touches multiple sections of this document. Network topology changes are documented in [Network Architecture > Production Enhancement](#production-enhancement--full-aws-deployment). PII filtering production path is in [Security & Data Boundary > PII Filtering](#pii-filtering). Cost economics at production scale are in the [README Cost section](../README.md#cost). This section covers the remaining concerns: storage migration triggers, latency at scale, failure modes, and architectural assumptions that hold across the cost and volume range.
 
 ### Vector Store — Migration Trigger
@@ -363,13 +365,13 @@ Generation dominates at ~90% of total query time. Three levers in order of impac
 
 **Bedrock rate limits.** Default Claude Sonnet TPM (tokens per minute) caps in us-east-1 are around 200K TPM. At 10K queries/month evenly distributed, this is fine. At burst loads or higher steady volume, request a TPM increase via AWS support — no code change required.
 
-**OpenAI embedding rate limits.** During corpus ingestion, `text-embedding-3-large` allows up to 5,000 RPM and 5M TPM by default. Re-ingesting the full 1,696-chunk corpus runs in seconds. Expanding to 100K chunks takes minutes within rate caps. Beyond that, batched ingestion with backoff (already handled by the OpenAI Python SDK) suffices.
+**OpenAI embedding rate limits.** Default tier-1 limits accommodate ingestion at portfolio and light production scale; high-volume ingestion relies on the OpenAI Python SDK's standard retry and backoff behavior.
 
 **HNSW query latency degradation.** pgvector HNSW P99 stays under 50ms at the current corpus size. At 100K chunks, P99 climbs toward 80–100ms depending on tuning of `ef_search`. The Vector Store migration trigger above fires at P99 > 100ms at peak load OR corpus exceeds 1M chunks.
 
 **Langfuse trace ingestion under burst.** Langfuse Cloud handles bursts well at portfolio scale. At production scale (10K+ queries/month), self-hosted Langfuse inside the AWS VPC handles the volume cleanly and addresses the boundary-disclosure gap (GAP-004 in AIIA). The `LANGFUSE_HOST` environment variable controls the switch with no application code change.
 
-**RDS connection pool exhaustion.** db.t3.micro saturates around 1,000 active queries per minute due to connection limits, not compute. Migration to db.t3.small handles 10K queries/month cleanly. db.r6g.large or larger for 100K+ queries/month. Cost details in the [README Cost section](../README.md#cost).
+**RDS connection pool sizing.** RDS instance class scales independently of per-query economics — see the [README Cost section](../README.md#cost) for sizing recommendations at volume.
 
 ### What Does Not Change at Scale
 
