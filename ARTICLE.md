@@ -2,6 +2,8 @@
 
 *Guardrails · Retrieval Integrity · Evaluation Discipline · Trust Boundaries · Production Architecture*
 
+Raghunath Devayajanam · May 2026
+
 Generative AI has moved past the curiosity phase. Pilot funding, strategy decks, and board-level commitments are now the standard at most enterprises. The question is no longer whether to build with these models. It is what to build, and how reliably it runs once the demo lands.
 
 Retrieval-Augmented Generation has become the default pattern for Enterprise AI. The goal is straightforward: bring your own data, anchor a capable model to authoritative sources, and require grounded responses. The pattern is widely adopted. The value proposition is real.
@@ -81,7 +83,7 @@ Reliability is what turns that capability into leverage. Guardrails, evaluation 
 
 For enterprises where answer quality has consequences, the trust layer is the architecture. Everything else is just plumbing.
 
-**The question is not what Enterprise AI systems can produce. It is what you can defend.**
+**The question is not what Enterprise AI systems can produce. It is whether the result is grounded enough to defend.**
 
 ---
 
