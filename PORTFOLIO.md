@@ -9,6 +9,10 @@ Raghunath Devayajanam · April 2026
 - **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** — federal-grade governance artifact mapping RAG risks to implemented controls per NIST AI RMF 1.0. Sample artifact — fictional sponsoring agency.
 - **[Beyond Retrieval: Architecting the Trust Layer for Enterprise AI](ARTICLE.md)** — generalized architectural patterns drawn from production RAG governance lessons.
 
+🔗 **Related portfolio projects**
+
+- **[responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)** — predecessor portfolio project. Same governance discipline (NIST AI RMF 1.0, fairness audits, drift monitoring, decision-log rigor) applied to **end-to-end traditional ML** — XGBoost income risk scoring on US Census data, full lifecycle from ingestion through deployment. This project extends that discipline to **generative AI**.
+
 ---
 
 ## What This Is

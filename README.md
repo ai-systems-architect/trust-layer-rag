@@ -32,6 +32,10 @@ Designed for high-stakes, audit-sensitive environments where correctness, tracea
 - **[Beyond Retrieval: Architecting the Trust Layer for Enterprise AI](ARTICLE.md)** — generalized architectural patterns this project demonstrates, drawn from production RAG governance lessons.
 - **[Architecture](docs/architecture.md)** · **[Decision log](docs/decision_log.md)** · **[Evaluation methodology](docs/evaluation_methodology.md)**
 
+🔗 **Related portfolio projects**
+
+- **[responsible-mlops-risk-engine](https://github.com/ai-systems-architect/responsible-mlops-risk-engine)** — predecessor portfolio project. Same governance discipline (NIST AI RMF 1.0, fairness audits, drift monitoring, decision-log rigor) applied to **end-to-end traditional ML** — XGBoost income risk scoring on US Census data, full lifecycle from ingestion through deployment. This project extends that discipline to **generative AI**.
+
 ---
 
 > Independent portfolio project demonstrating production-grade governed RAG architecture for federal compliance corpora. Built on public-domain US Government frameworks. Not affiliated with or endorsed by any agency, contractor, or commercial vendor. Views are the author's own.
