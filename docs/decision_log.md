@@ -934,7 +934,7 @@ Cohere is the primary ranking layer. Both are valid with different cost optimiza
 
 ---
 
-## DL-022 — Input-Side Query Guardrail
+## DL-022 — Dual Guardrail Architecture (Input + Output)
 **Date:** 2026-04-14
 
 **Decision:** Apply Bedrock Guardrails at query input via `apply_guardrail` API before
