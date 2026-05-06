@@ -22,3 +22,8 @@ output "db_username" {
   description = "PostgreSQL master username — add to .env as RDS_USER"
   value       = var.db_username
 }
+
+output "bedrock_guardrail_id" {
+  description = "Bedrock guardrail ID — add to .env as BEDROCK_GUARDRAIL_ID"
+  value       = aws_bedrock_guardrail.compliance.guardrail_id
+}

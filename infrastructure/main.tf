@@ -25,8 +25,9 @@ resource "aws_db_parameter_group" "ssl_required" {
   family = "postgres15"
 
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
 }
 
@@ -71,4 +72,39 @@ resource "aws_s3_bucket_public_access_block" "corpus" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# Bedrock Guardrail — input prompt-attack filter + output contextual grounding
+# Adopted into Terraform via `terraform import` after originally being created
+# out-of-band. Keep attributes aligned with the live policy so plan stays clean.
+# see docs/decision_log.md DL-022
+resource "aws_bedrock_guardrail" "compliance" {
+  name                      = "governed-compliance-guardrail"
+  description               = "Prevents overclaiming in federal compliance responses"
+  blocked_input_messaging   = "This query cannot be processed under the compliance assistant policy."
+  blocked_outputs_messaging = "This response was blocked — the answer could not be grounded in the retrieved compliance documents."
+
+  content_policy_config {
+    filters_config {
+      type            = "PROMPT_ATTACK"
+      input_strength  = "HIGH"
+      output_strength = "NONE"
+    }
+    filters_config {
+      type            = "MISCONDUCT"
+      input_strength  = "MEDIUM"
+      output_strength = "MEDIUM"
+    }
+  }
+
+  contextual_grounding_policy_config {
+    filters_config {
+      type      = "GROUNDING"
+      threshold = 0.7
+    }
+    filters_config {
+      type      = "RELEVANCE"
+      threshold = 0.7
+    }
+  }
 }
