@@ -17,7 +17,7 @@ Built as a compliance *reference assistant* — not a compliance *assessment too
 
 - **Hybrid retrieval with measurable lift** — dense pgvector HNSW + BM25 sparse via Reciprocal Rank Fusion + Cohere cross-encoder reranking. nDCG@5 progresses from 0.8883 (semantic-only) to 0.9265 (hybrid + rerank) on a 20-question architect-level evaluation set.
 - **Three independent evaluation layers** — RAGAs end-to-end (Faithfulness 0.89–0.90, Context Precision 0.94–0.95 across configurations), retrieval diagnostics (Recall@k, MRR, nDCG across three configurations), and adversarial guardrail evaluation. Each layer answers a different question.
-- **Dual-gate Bedrock Guardrails** — input gate blocks injection and off-topic queries before retrieval fires (saves full pipeline cost on adversarial input). Output gate catches unsupported claims post-generation in the same `converse()` call.
+- **Dual-gate Bedrock Guardrails** — input gate (`PROMPT_ATTACK` HIGH) blocks injection and jailbreak attempts before retrieval fires, saving full pipeline cost on adversarial input. Output gate enforces contextual grounding (`GROUNDING ≥ 0.7`, `RELEVANCE ≥ 0.7`) post-generation in the same `converse()` call. Off-topic queries are handled downstream by retrieval grounding, not the input gate.
 - **Domain-calibrated PII filtering** — Presidio with a 20-term federal allowlist and control-ID regex post-filter prevents false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names (FedRAMP, NIST, AWS) that general-purpose NER classifies as PERSON entities.
 - **Decision log discipline** — every architectural choice documented in DL-001 through DL-029 with alternatives evaluated and rationale recorded. The architecture is auditable, not just observable.
 - **Federal-grade governance artifact** — sample AI Impact Assessment maps RAG-specific risks to implemented controls following NIST AI RMF 1.0, EO 13960, and OMB M-21-06 patterns.
@@ -79,7 +79,8 @@ systems.
 | Failure Mode | Architectural Control |
 |---|---|
 | Sensitive data in queries and responses | PII filtering (Presidio) at input and output |
-| Prompt injection and off-topic queries | Bedrock Guardrails — input gate before retrieval fires |
+| Prompt injection and jailbreak attempts | Bedrock Guardrails — input gate (PROMPT_ATTACK filter) before retrieval fires |
+| Off-topic / out-of-scope queries | Retrieval precision — rerank scores near zero, citation-enforced system prompt declines without context |
 | Ambiguous follow-up queries degrade retrieval | Query enrichment via Bedrock Claude at temp=0.0 |
 | Irrelevant corpus sections retrieved | Metadata-aware filtering (control_family, impact_level) |
 | Keyword queries fail semantic retrieval | Hybrid retrieval (dense + BM25 + RRF) |
@@ -107,7 +108,7 @@ correctness, auditability, and controlled behavior in high-risk environments.
 | Re-ranking | Cross-encoder re-rank | Cohere rerank-english-v3.0 |
 | Tracing | Full pipeline observability | Langfuse Cloud |
 | Generation | Citation-enforced prompts | Claude Sonnet 4.5 via Bedrock |
-| Guardrails | Dual gates — input (prompt injection, off-topic) + output (overclaiming) | Bedrock Guardrails |
+| Guardrails | Dual gates — input (PROMPT_ATTACK + MISCONDUCT) + output (contextual grounding ≥0.7, MISCONDUCT) | Bedrock Guardrails |
 | Evaluation | Golden dataset scoring | RAGAs |
 | Frontend | Chat UI + debug sidebar | Streamlit |
 | Infrastructure | RDS, S3, IAM | Terraform + AWS |
@@ -136,7 +137,7 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 | # | Stage | What it does | DL |
 |---|---|---|---|
 | 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | 017 |
-| 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection, off-topic queries, and jailbreak patterns before retrieval fires — one Bedrock call cost vs full pipeline. | 022 |
+| 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection and jailbreak attempts (PROMPT_ATTACK filter, HIGH on input) before retrieval fires — one Bedrock call cost vs full pipeline. Off-topic queries are not blocked here; they are handled downstream by retrieval grounding. | 022 |
 | 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` resolves pronouns and ambiguous references in follow-up queries before the embedding call. Bypassed on first turn, long queries, queries with no pronouns. | 025 |
 | 4 | Classify | Rule-based metadata classifier infers `control_family` and `impact_level` filters from the enriched query. AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction). | 023 |
 | 5 | Ingestion (offline) | NIST 800-53, AI RMF, AI 600-1, FedRAMP Moderate parsed, chunked (600 tokens / 100 overlap), embedded via OpenAI text-embedding-3-large (1536 dims via Matryoshka), stored in pgvector on RDS with `control_family` and `impact_level` metadata columns. | 007, 018 |

@@ -118,7 +118,7 @@ additional layer here exists because of a specific production failure mode.
 | Layer | Why it exists |
 |-------|---------------|
 | PII scrub (Presidio) at input and output | Query text and generated answers scrubbed before any external service call — embedding, reranking, and Langfuse traces receive clean content |
-| Input guardrail (Bedrock) before retrieval | Blocks prompt injection and off-topic queries before pgvector, Cohere, or Claude are invoked — one Bedrock call cost vs full pipeline |
+| Input guardrail (Bedrock) before retrieval | Blocks prompt injection and jailbreak attempts (PROMPT_ATTACK filter, HIGH on input) before pgvector, Cohere, or Claude are invoked — one Bedrock call cost vs full pipeline. Off-topic queries are caught downstream by retrieval grounding, not by this gate |
 | Query enrichment via Bedrock Claude | Pronoun follow-ups ("how does that relate to…") resolved before embedding — retriever embeds a fully specified query, not an unresolved reference |
 | Metadata-filtered retrieval (control_family, impact_level) | Rule-based classifier pre-filters the vector search to the relevant NIST family or FedRAMP baseline — reduces noise before RRF fusion |
 | Post-RRF quality gate | RRF ranks weak candidates against each other regardless of absolute score — gate (MIN_RRF_SCORE=0.0150) stops noise reaching Cohere |
