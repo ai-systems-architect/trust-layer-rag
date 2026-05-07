@@ -523,7 +523,7 @@ posture as default VPC with public RDS, with more Terraform overhead.
 Streamlit Community Cloud uses GCP shared IP ranges — broad CIDR
 blocks not guaranteed stable. Whitelisting GCP ranges effectively
 opens RDS to large portions of internet. Developer IP changes across
-networks. IP restriction creates access friction for interviews
+networks. IP restriction creates access friction for reviewers
 without meaningful security improvement.
 
 **Security controls in place:**
