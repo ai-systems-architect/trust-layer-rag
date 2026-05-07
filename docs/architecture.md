@@ -245,7 +245,7 @@ layer is co-located inside AWS. With Streamlit on GCP, a dedicated
 VPC with public RDS has identical security posture to default VPC
 with public RDS — same exposure, more Terraform code. The production
 enhancement above is the architecturally correct path — documented
-here for completeness and interview discussion.
+here for completeness.
 
 ---
 
