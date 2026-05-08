@@ -329,7 +329,7 @@ If compliance boundary is not a constraint, these replace pgvector entirely:
 
 ## Production Operations
 
-This section documents how the architecture would evolve under production load. The current portfolio deployment runs at demo scale; the analysis below identifies migration triggers, optimization levers, and failure modes that become relevant at production volumes — answering the "how would this scale" question directly rather than implying that scaling has already been engineered.
+This section documents how the architecture would evolve under production load. The current portfolio deployment runs at demo scale; the analysis below identifies migration triggers, optimization levers, and failure modes that become relevant at production volumes.
 
 Production deployment touches multiple sections of this document. Network topology changes are documented in [Network Architecture > Production Enhancement](#production-enhancement--full-aws-deployment). PII filtering production path is in [Security & Data Boundary > PII Filtering](#pii-filtering). Cost economics at production scale are in the [README Cost section](../README.md#cost). This section covers the remaining concerns: storage migration triggers, latency at scale, failure modes, and architectural assumptions that hold across the cost and volume range.
 
@@ -355,7 +355,7 @@ precision without schema changes.
 
 Generation dominates at ~90% of total query time. Three levers in order of impact:
 
-**Token streaming.** Stream Claude's output to the UI as tokens arrive. Total latency is unchanged (~8–13s for full response), but perceived latency drops to ~1–2s for the first visible content. Highest-impact UX improvement available without architectural changes.
+**Token streaming.** Bedrock `converse_stream()` sends tokens as they are generated rather than waiting for the full response. The UI renders word-by-word — user sees the first words in ~1–2s even though total response time remains ~8–13s. Highest-impact UX improvement available without architectural changes.
 
 **Intent routing to Claude Haiku for simpler queries.** Most control-ID lookups don't need Sonnet. A rule-based or lightweight classifier ahead of generation routes "what does AC-6 require?" to Haiku, which generates 2–3× faster than Sonnet for short responses. Architect-level synthesis questions still route to Sonnet. The same lever serves both cost and latency. The query enrichment stage (DL-025) is the right insertion point — intent classification can run alongside pronoun resolution in the same Bedrock call.
 
