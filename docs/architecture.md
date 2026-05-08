@@ -405,7 +405,7 @@ trust-layer-rag/
 │                                   label_chunks, pii_filter_test
 ├── tracing/                        Langfuse client (span-per-stage)
 ├── utils/                          pii_filter (Presidio + control-ID regex)
-├── infrastructure/                 Terraform — RDS, S3, IAM
+├── infrastructure/                 Terraform — RDS, S3, IAM, Bedrock Guardrails
 ├── scripts/                        rds_start, rds_stop, run_worked_examples
 ├── prompts/system_prompt.txt
 ├── config/prompts.yaml
