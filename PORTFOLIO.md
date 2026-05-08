@@ -224,7 +224,9 @@ Full rationale with alternatives evaluated in [docs/decision_log.md](docs/decisi
 
 ---
 
-## NIST AI RMF Alignment
+## Security & Compliance Posture
+
+### NIST AI RMF Alignment
 
 | Function | Implementation |
 |---|---|
@@ -232,6 +234,8 @@ Full rationale with alternatives evaluated in [docs/decision_log.md](docs/decisi
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
 | MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite |
+
+OWASP LLM Top 10 alignment (LLM01 through LLM09) documented in [README — Security & Compliance Posture](README.md#security--compliance-posture).
 
 ---
 

@@ -86,7 +86,7 @@ systems.
 | Keyword queries fail semantic retrieval | Hybrid retrieval (dense + BM25 + RRF) |
 | Weak candidates ranked despite low relevance | Post-RRF quality gate (MIN_RRF_SCORE=0.0150) |
 | Embedding similarity lacks precision | Cohere cross-encoder reranking |
-| Model overclaims beyond retrieved context | Bedrock Guardrails — output gate |
+| Model overclaims beyond retrieved context | Bedrock Guardrails — output gate (contextual grounding threshold ≥ 0.7; responses below threshold blocked before reaching user) |
 | No visibility into system behavior | Langfuse tracing across all pipeline stages |
 | Retrieval quality not measurable | RAGAs + retrieval diagnostics (Recall@k, MRR, nDCG) |
 | Model and provider lock-in risk | Embedding and generation providers swappable via environment variable |
@@ -136,7 +136,7 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 
 | # | Stage | What it does | DL |
 |---|---|---|---|
-| 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | 017 |
+| 1 | PII Scrub | Presidio en_core_web_lg scrubs query and generated output. Detected entity types: PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS (and others). Domain allowlist (FedRAMP, NIST, AWS, ISSO + 16 federal terms) and control ID regex prevent false-positive scrubbing of NIST identifiers. | 017 |
 | 2 | Input Guardrail | Bedrock `apply_guardrail` blocks prompt injection and jailbreak attempts (PROMPT_ATTACK filter, HIGH on input) before retrieval fires — one Bedrock call cost vs full pipeline. Off-topic queries are not blocked here; they are handled downstream by retrieval grounding. | 022 |
 | 3 | Query Enrichment | Bedrock Claude at `temperature=0.0` resolves pronouns and ambiguous references in follow-up queries before the embedding call. Bypassed on first turn, long queries, queries with no pronouns. | 025 |
 | 4 | Classify | Rule-based metadata classifier infers `control_family` and `impact_level` filters from the enriched query. AC-family query reduces corpus from 1,696 to 424 chunks (75% reduction). | 023 |
@@ -144,7 +144,7 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 | 6 | Retrieval | Hybrid dense (pgvector HNSW) + sparse (BM25 tsvector) fused via RRF. Control IDs regex pre-extracted before BM25's 5-term limit. Returns top-10 candidates. | 008, 019 |
 | 7 | Post-RRF Quality Gate | `MIN_RRF_SCORE=0.0150` drops weak candidates before Cohere reranks them. Safety floor: 3 candidates always pass. Threshold derived from empirical score distribution across 7 representative queries. | 024 |
 | 8 | Reranking | Cohere rerank-english-v3.0 cross-encoder scores filtered candidates jointly against the query. Returns top-5. | 005 |
-| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Pydantic `GenerateResponse` validates response shape before return. | 004, 022 |
+| 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Contextual grounding threshold ≥ 0.7 — responses below threshold are blocked before reaching the user (pass/fail; raw grounding score is not returned by the API). Pydantic `GenerateResponse` validates response shape before return. | 004, 022 |
 | 10 | Evaluation (offline) | Three independent layers — RAGAs (Faithfulness/Context Precision/Context Recall/Answer Relevancy), retrieval diagnostics (Recall@k/MRR/nDCG across three configurations), and adversarial guardrail evaluation (5 negative cases with two-signal pass detection). | 009, 021, 028 |
 
 Full per-stage rationale, code references, and design tradeoffs are in [docs/architecture.md](docs/architecture.md). Decision log entries (DL-001 through DL-029) cover the why behind each stage in [docs/decision_log.md](docs/decision_log.md).
@@ -296,7 +296,9 @@ Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failure 4 is an 
 
 ---
 
-## NIST AI RMF Alignment
+## Security & Compliance Posture
+
+### NIST AI RMF Alignment
 
 | Function | Implementation |
 |---|---|
@@ -304,6 +306,22 @@ Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failure 4 is an 
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
 | MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite |
+
+### OWASP LLM Top 10 Alignment
+
+[OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) is the industry-standard taxonomy of security risks in LLM-based applications.
+
+| Risk | How this system addresses it |
+|---|---|
+| LLM01 — Prompt Injection | Input guardrail (`PROMPT_ATTACK` HIGH) blocks injection before retrieval fires. Static trusted corpus — retrieved chunks cannot carry injected instructions. |
+| LLM02 — Sensitive Information Disclosure | Presidio PII scrub at input and output (PERSON, EMAIL_ADDRESS, US_SSN, IP_ADDRESS). Corpus is public federal documents — no sensitive data at rest. |
+| LLM04 — Data and Model Poisoning | Corpus is static, read-only, sourced from official NIST/CSRC and FedRAMP URLs — no user-contributed content, no write path to the vector store. |
+| LLM05 — Improper Output Handling | Pydantic `GenerateResponse` validates every response shape before leaving `generate()`. Presidio scrubs the generated answer before it reaches the caller. |
+| LLM06 — Excessive Agency | RAG-only system — no tool execution, no memory writes, no external API calls triggered by the model. Agency is zero by design. |
+| LLM08 — Vector / Embedding Weaknesses | Static corpus eliminates poisoning risk. Metadata filters restrict retrieval scope. All embeddings within the AWS boundary (RDS pgvector — no third-party vector store). |
+| LLM09 — Misinformation / Hallucination | Contextual grounding threshold ≥ 0.7 blocks responses not supported by retrieved chunks (pass/fail — raw score not returned by API). Faithfulness 0.89–0.90 on 20-question golden dataset. Citation enforcement in system prompt. |
+
+Partially addressed: **LLM03** (Supply Chain) — OpenAI, Cohere, Langfuse dependencies documented in [Deployment Boundary](#deployment-boundary); no SBOM or automated dependency scanning beyond `requirements.txt`. **LLM07** (System Prompt Leakage) — system prompt is a 7-line citation-boundary instruction with no embedded credentials or sensitive logic. **LLM10** (Unbounded Consumption) — input gate short-circuits full pipeline cost on adversarial queries; no explicit rate limiting at portfolio scale.
 
 ---
 

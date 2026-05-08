@@ -15,6 +15,8 @@ citation-enforced responses via Claude Sonnet 4.5 on Bedrock, and enforces
 hallucination controls via Bedrock Guardrails. Every pipeline call is traced
 end-to-end in Langfuse Cloud.
 
+Security posture mapped to NIST AI RMF and OWASP LLM Top 10 — see [README — Security & Compliance Posture](../README.md#security--compliance-posture).
+
 ---
 
 ## System Architecture
