@@ -349,9 +349,12 @@ store adapter only — retrieval interface is abstracted, application code
 does not change. See [decision_log.md](decision_log.md) DL-002.
 
 **If corpus expands beyond current four documents:**
-Metadata filtering by source or impact level recommended — pgvector WHERE
-clause pre-filter before HNSW search reduces candidate set and improves
-precision without schema changes.
+Metadata filtering by `control_family` and `impact_level` is already
+implemented — the rule-based classifier (DL-023) infers WHERE clause
+pre-filters from query text before HNSW search runs. AC-family queries
+reduce the candidate pool from 1,696 to 424 chunks (75%) today. Adding
+new frameworks or control families requires updating the classifier regex
+in `pipeline.py`; the schema and retrieval layer need no changes.
 
 ### Latency Optimization Levers
 

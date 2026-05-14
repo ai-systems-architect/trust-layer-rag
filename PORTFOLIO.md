@@ -2,7 +2,7 @@
 
 **Governed RAG · Federal Compliance Reference Implementation**
 
-Raghunath Devayajanam · April 2026
+Raghunath Devayajanam · May 2026
 
 📄 **Companion artifacts**
 

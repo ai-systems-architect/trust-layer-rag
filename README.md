@@ -184,7 +184,7 @@ distance. Runs only on the top-10 retrieved chunks, not the full corpus.
 Live pipeline trace — query: "What does AC-6 require and what are its key enhancements?"
 Trace ID: d83dcaee-ff26-4b32-8ae3-5b0d90cfb979
 
-The trace screenshots below verify that the architectural claims in the prior sections match the runtime behavior. The full pipeline ran end-to-end: input guardrail checked, metadata classifier inferred `control_family=AC` (424 of 1,696 chunks searched — 75% reduction), hybrid retrieval combined dense + BM25 with `sparse_query: 'AC-6 require key enhancements'`, post-RRF gate passed 7 of 11 candidates, Cohere reranked 7 → 5, Claude Sonnet 4.5 generated a cited response, output guardrail action: none.
+The trace screenshots below verify that the architectural claims in the prior sections match the runtime behavior. The full pipeline ran end-to-end: input guardrail checked, metadata classifier inferred `control_family=AC` (424 of 1,696 chunks searched — 75% reduction), hybrid retrieval combined dense + BM25 with `sparse_query: 'AC-6 require key enhancements'`, post-RRF gate passed 7 of 11 candidates, Cohere reranked 7 → 5 (top chunk relevance score: 0.989), Claude Sonnet 4.5 generated a cited response, output guardrail action: none.
 
 For a high-level demo: see [Worked Examples](docs/worked_examples.md) for the AC-6 query rendered as a user-facing answer with citations and retrieved chunks. The screenshots below show the underlying pipeline trace for architectural verification.
 
@@ -196,6 +196,8 @@ For a high-level demo: see [Worked Examples](docs/worked_examples.md) for the AC
 
 ![Generate span — reranked chunks in, cited answer out](docs/images/trace_generate.png)
 *Generate span — 5 reranked chunks passed to Claude Sonnet 4.5 via Bedrock, AC-6 cited response returned, guardrail_action=none.*
+
+Cohere returns a relevance score (0–1 cross-encoder probability) per chunk. Full RRF + rerank scoring tables for all three query types: [docs/worked_examples.md](docs/worked_examples.md).
 
 ---
 
