@@ -13,6 +13,8 @@ A production-grade, governed Retrieval-Augmented Generation system over four fed
 
 Built as a compliance *reference assistant* — not a compliance *assessment tool*. The system retrieves and synthesizes what frameworks require. It does not determine whether a system is compliant. That boundary is enforced in the system prompt and validated by Bedrock Guardrails on every response.
 
+Implements a governed compliance RAG pattern: hybrid retrieval + dual guardrail gate + metadata-aware routing.
+
 **What makes this distinctive:**
 
 - **Hybrid retrieval with measurable lift** — dense pgvector HNSW + BM25 sparse via Reciprocal Rank Fusion + Cohere cross-encoder reranking. nDCG@5 progresses from 0.8883 (semantic-only) to 0.9265 (hybrid + rerank) on a 20-question architect-level evaluation set.

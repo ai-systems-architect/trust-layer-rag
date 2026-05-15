@@ -5,6 +5,50 @@ see [decision_log.md](decision_log.md).
 
 ---
 
+## C4 Context — System Context Diagram
+
+```mermaid
+C4Context
+  title System Context — Trust Layer RAG: Federal Compliance Intelligence
+
+  Person(analyst, "Federal Compliance Analyst", "Queries for policy guidance on NIST, FedRAMP, and AI RMF requirements")
+
+  System(trustlayer, "Trust Layer RAG", "Governed RAG pipeline with dual guardrail gates, hybrid retrieval, and PII controls")
+
+  System_Ext(bedrock, "Amazon Bedrock", "LLM generation (Claude Sonnet 4.5) + input/output Guardrails")
+  System_Ext(rds, "Amazon RDS / pgvector", "Vector embeddings + BM25 tsvector index")
+  System_Ext(cohere, "Cohere Rerank API", "Cross-encoder reranking (rerank-english-v3.0)")
+  System_Ext(openai, "OpenAI Embeddings API", "text-embedding-3-large, 1536 dims")
+  System_Ext(langfuse, "Langfuse Cloud", "Trace-level observability per query")
+  System_Ext(presidio, "Presidio", "PII scrubbing on input and output")
+  System_Ext(nist, "NIST / FedRAMP Source Documents", "SP 800-53 Rev 5, AI RMF 1.0, AI 600-1, FedRAMP Moderate Baseline")
+
+  Rel(analyst, trustlayer, "Submits compliance query")
+  Rel(trustlayer, bedrock, "Generates response + enforces guardrails")
+  Rel(trustlayer, rds, "Retrieves chunks via HNSW + tsvector")
+  Rel(trustlayer, cohere, "Reranks top-10 candidates")
+  Rel(trustlayer, openai, "Embeds query")
+  Rel(trustlayer, langfuse, "Traces all pipeline spans")
+  Rel(trustlayer, presidio, "Scrubs PII from query and response")
+  Rel(nist, trustlayer, "Source corpus — ingested at build time")
+```
+
+*See [governed_rag_architecture.png](images/governed_rag_architecture.png) for full pipeline detail.*
+
+---
+
+## Architecture Pattern
+
+**Pattern: Governed Compliance RAG — hybrid retrieval + dual guardrail gate + metadata-aware routing**
+
+This system implements a governed compliance RAG pattern characterized by three decisions:
+
+- **Hybrid retrieval** — dense pgvector HNSW + sparse BM25 fused via RRF (k=60). Captures both semantic and lexical signal across the NIST/FedRAMP corpus. Control identifiers (AC-6, IR-4) need exact token matching that semantic retrieval alone misses at rank 1.
+- **Dual guardrail gate** — Bedrock Guardrails applied at input before retrieval fires and at output before the response is returned. Compliance assertions never bypass safety controls regardless of retrieval quality.
+- **Metadata-aware routing** — rule-based classifier routes queries by control family and impact level before retrieval runs. Reduces candidate set noise and enforces document scope without schema changes.
+
+---
+
 ## Overview
 
 Governed RAG system for NIST, FISMA, and FedRAMP compliance. Ingests four
