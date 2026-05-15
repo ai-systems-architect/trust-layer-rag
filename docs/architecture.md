@@ -5,38 +5,6 @@ see [decision_log.md](decision_log.md).
 
 ---
 
-## C4 Context — System Context Diagram
-
-```mermaid
-C4Context
-  title System Context — Trust Layer RAG: Federal Compliance Intelligence
-
-  Person(analyst, "Federal Compliance Analyst", "Queries for policy guidance on NIST, FedRAMP, and AI RMF requirements")
-
-  System(trustlayer, "Trust Layer RAG", "Governed RAG pipeline with dual guardrail gates, hybrid retrieval, and PII controls")
-
-  System_Ext(bedrock, "Amazon Bedrock", "LLM generation (Claude Sonnet 4.5) + input/output Guardrails")
-  System_Ext(rds, "Amazon RDS / pgvector", "Vector embeddings + BM25 tsvector index")
-  System_Ext(cohere, "Cohere Rerank API", "Cross-encoder reranking (rerank-english-v3.0)")
-  System_Ext(openai, "OpenAI Embeddings API", "text-embedding-3-large, 1536 dims")
-  System_Ext(langfuse, "Langfuse Cloud", "Trace-level observability per query")
-  System_Ext(presidio, "Presidio", "PII scrubbing on input and output")
-  System_Ext(nist, "NIST / FedRAMP Source Documents", "SP 800-53 Rev 5, AI RMF 1.0, AI 600-1, FedRAMP Moderate Baseline")
-
-  Rel(analyst, trustlayer, "Submits compliance query")
-  Rel(trustlayer, bedrock, "Generates response + enforces guardrails")
-  Rel(trustlayer, rds, "Retrieves chunks via HNSW + tsvector")
-  Rel(trustlayer, cohere, "Reranks top-10 candidates")
-  Rel(trustlayer, openai, "Embeds query")
-  Rel(trustlayer, langfuse, "Traces all pipeline spans")
-  Rel(trustlayer, presidio, "Scrubs PII from query and response")
-  Rel(nist, trustlayer, "Source corpus — ingested at build time")
-```
-
-*See [governed_rag_architecture.png](images/governed_rag_architecture.png) for full pipeline detail.*
-
----
-
 ## Architecture Pattern
 
 **Pattern: Governed Compliance RAG — hybrid retrieval + dual guardrail gate + metadata-aware routing**
@@ -60,6 +28,26 @@ hallucination controls via Bedrock Guardrails. Every pipeline call is traced
 end-to-end in Langfuse Cloud.
 
 Security posture mapped to NIST AI RMF and OWASP LLM Top 10 — see [README — Security & Compliance Posture](../README.md#security--compliance-posture).
+
+---
+
+## System Context
+
+**System:** Trust Layer RAG — Federal Compliance Intelligence  
+**Pattern:** Governed Compliance RAG — hybrid retrieval + dual guardrail gate + metadata-aware routing
+
+**User:** Federal Compliance Analyst — queries for policy guidance across NIST SP 800-53 Rev 5, AI RMF 1.0, AI 600-1, and FedRAMP Moderate Baseline.
+
+**External dependencies:**
+- Amazon Bedrock — LLM generation (Claude Sonnet) + input/output Guardrails
+- Amazon RDS / pgvector — vector embeddings + BM25 tsvector index
+- Cohere Rerank API — cross-encoder reranking (rerank-english-v3.0)
+- OpenAI Embeddings API — text-embedding-3-large, 1536 dims
+- Langfuse Cloud — trace-level observability per query
+- Presidio — PII scrubbing on input and output
+- NIST / FedRAMP Source Documents — SP 800-53 Rev 5, AI RMF 1.0, AI 600-1, FedRAMP Moderate Baseline
+
+See [governed_rag_architecture.png](images/governed_rag_architecture.png) for full pipeline detail.
 
 ---
 
