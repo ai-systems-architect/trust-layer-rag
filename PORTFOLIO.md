@@ -21,6 +21,8 @@ A production-grade Retrieval-Augmented Generation pipeline over federal complian
 
 Built as a compliance *reference assistant* — not a compliance *assessment tool*. The system retrieves and synthesizes what the frameworks require. It does not assess whether a specific system satisfies those requirements. That distinction is enforced in the system prompt and validated by Bedrock Guardrails on every response.
 
+This demo simulates a federal compliance analyst querying across NIST SP 800-53, AI RMF, AI 600-1, and FedRAMP Moderate — with PII filtering and dual guardrail enforcement active.
+
 ![Governed RAG architecture](docs/images/governed_rag_architecture.png)
 *Governed RAG architecture — three-pipeline view with governance, observability, and security boundaries marked.*
 

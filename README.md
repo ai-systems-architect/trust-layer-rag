@@ -190,6 +190,10 @@ The trace screenshots below verify that the architectural claims in the prior se
 
 For a high-level demo: see [Worked Examples](docs/worked_examples.md) for the AC-6 query rendered as a user-facing answer with citations and retrieved chunks. The screenshots below show the underlying pipeline trace for architectural verification.
 
+> This demo simulates a federal compliance analyst querying across
+> NIST SP 800-53, AI RMF, AI 600-1, and FedRAMP Moderate — with
+> PII filtering and dual guardrail enforcement active.
+
 ![Trace overview — full pipeline span timeline with query metadata and AC-6 answer output](docs/images/trace_overview.png)
 *Trace overview — compliance-query trace showing retrieve (1.00s), rerank (0.17s), generate (10.32s) spans. Input: original query, retriever=hybrid, filters control_family=AC. Output: full AC-6 cited answer, guardrail_action=none.*
 
