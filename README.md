@@ -539,6 +539,13 @@ Vector store migration (pgvector → Qdrant) is triggered by corpus size or HNSW
 
 ---
 
+## Further Reading
+
+- [Project overview → raghudevayajanam.com](https://raghudevayajanam.com/work/trust-layer-rag/)
+- [Companion article: Beyond Retrieval — Architecting the Trust Layer for Enterprise AI](https://raghudevayajanam.com/writing/beyond-retrieval/)
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE.md).
