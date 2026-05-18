@@ -164,7 +164,21 @@ not the full corpus, keeping cost negligible.
 
 ---
 
-## RAGAs Evaluation Results
+## Governance Outcomes
+
+Measured across three independent evaluation layers — RAGAs end-to-end quality, retrieval diagnostics, and adversarial guardrail evaluation — against a 20-question architect-level golden dataset covering all four corpus sources.
+
+| Metric | Result | Signal |
+|--------|--------|--------|
+| Faithfulness | 0.90 | Grounded in retrieved chunks — primary correctness signal |
+| Context Precision | 0.94 | Retrieved chunks are high-signal, low-noise |
+| Context Recall | 0.75 | Sufficient — over-retrieval adds noise in compliance contexts |
+| Answer Relevancy | 0.56 | Expected — hedged compliance assertions score low by design |
+| nDCG@5 (Hybrid + Rerank) | 0.9265 | Best of three configurations; RRF + Cohere each add measurable lift |
+| RRF quality gate | 0.0150 | Just above theoretical floor 1/(60+10)=0.0143 — drops single-leg tail candidates |
+| Adversarial refusal rate | 5 / 5 | Corpus grounding defense — near-zero rerank scores on out-of-scope queries; hard guardrail block not triggered |
+
+### RAGAs — End-to-End Quality
 
 Evaluated against a 20-question golden dataset — five questions per
 corpus source, three cross-corpus synthesis questions requiring reasoning
@@ -192,7 +206,7 @@ NIST 800-53 and FedRAMP queries. BM25 fired on 10 of 20 questions —
 AI RMF and AI 600-1 governance language is too diffuse for BM25 to
 anchor on, so hybrid falls back to dense-only for those queries.
 
-**Answer relevancy 0.55** is below the 0.70 minimum. Two documented
+**Answer relevancy 0.56** is below the 0.70 minimum. Two documented
 causes: the system prompt instructs Claude to hedge and note applicability
 limitations — correct for compliance but penalized by this metric. And
 architect-level multi-part questions fragment RAGAs synthetic question

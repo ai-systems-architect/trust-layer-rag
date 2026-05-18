@@ -203,10 +203,21 @@ Cohere returns a relevance score (0–1 cross-encoder probability) per chunk. Fu
 
 ---
 
-## Evaluation Results
+## Governance Outcomes
 
-RAGAs evaluation against a 20-question architect-level golden dataset covering
-all four corpus sources including cross-corpus synthesis questions.
+Measured across three independent evaluation layers — RAGAs end-to-end quality, retrieval diagnostics, and adversarial guardrail evaluation — against a 20-question architect-level golden dataset covering all four corpus sources.
+
+| Metric | Result | Signal |
+|--------|--------|--------|
+| Faithfulness | 0.90 | Grounded in retrieved chunks — primary correctness signal |
+| Context Precision | 0.94 | Retrieved chunks are high-signal, low-noise |
+| Context Recall | 0.75 | Sufficient — over-retrieval adds noise in compliance contexts |
+| Answer Relevancy | 0.56 | Expected — hedged compliance assertions score low by design |
+| nDCG@5 (Hybrid + Rerank) | 0.9265 | Best of three configurations; RRF + Cohere each add measurable lift |
+| RRF quality gate | 0.0150 | Just above theoretical floor 1/(60+10)=0.0143 — drops single-leg tail candidates |
+| Adversarial refusal rate | 5 / 5 | Corpus grounding defense — near-zero rerank scores on out-of-scope queries; hard guardrail block not triggered |
+
+### RAGAs — End-to-End Quality
 
 | Metric | Semantic | Hybrid |
 |--------|----------|--------|
