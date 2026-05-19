@@ -81,7 +81,7 @@ this evaluation for two reasons.
 
 First, for a federal compliance corpus, the source-of-truth is the corpus
 itself, not the evaluator's reference answer. The reference answers in the
-golden dataset were synthesized for chunk-labeling purposes (Option A token
+golden dataset were synthesized for chunk-labeling purposes (token
 Jaccard overlap with retrieved candidates) — they are useful as ground
 truth for retrieval evaluation but treating them as the canonical correct
 response assumes a single right answer exists. NIST text often supports
@@ -130,7 +130,7 @@ Three pipeline configurations are compared:
 ### Ground truth labeling methodology
 
 Each golden dataset question requires a set of `relevant_chunk_ids` — the chunk IDs
-the retriever should return. Labels are derived automatically (Option A):
+the retriever should return. Labels are derived automatically:
 
 1. Run broad retrieval: semantic top-30 + BM25 top-30 per question, deduplicated
 2. For each candidate chunk, compute token Jaccard overlap with the reference answer

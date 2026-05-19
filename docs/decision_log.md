@@ -1342,7 +1342,7 @@ Precision, Context Recall, and Answer Relevancy only.
    noisy and expensive. The RAGAs documentation itself ranks it below
    the retrieval-grounded metrics for reliability.
 4. Reference answers in the golden dataset were synthesized for chunk
-   labeling (Option A token Jaccard overlap), not as canonical responses.
+   labeling (token Jaccard overlap), not as canonical responses.
    Repurposing them as correctness ground truth would conflate two
    distinct evaluation roles.
 
