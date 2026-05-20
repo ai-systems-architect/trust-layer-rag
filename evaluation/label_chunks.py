@@ -4,7 +4,7 @@ For each positive question in the golden dataset, identifies which chunk IDs sho
 be retrieved. These become the ground truth labels for Recall@k, MRR, and nDCG
 computation in retrieval_diagnostics.py.
 
-Labeling methodology (Option A — auto-labeling from reference answers):
+Labeling methodology (auto-labeling from reference answers):
 1. Run broad retrieval: semantic top-30 + BM25 top-30 per question, deduplicated.
    Using both retrieval legs as the candidate pool avoids systematic bias toward
    either retrieval method during labeling.
