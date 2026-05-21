@@ -319,19 +319,30 @@ Results saved to `data/guardrail_results.json` on each run.
 
 ## Execution order
 
+**Locked artifacts — already run, do not re-run casually:**
+
+```bash
+# Ground truth labeling — generated relevant_chunk_ids in golden_dataset.json.
+# Re-run only if corpus changes (new documents ingested).
+# python evaluation/label_chunks.py
+
+# RAGAs evaluation — scores locked (Faithfulness 0.90, Context Precision 0.94, etc.).
+# Re-run only if generation model or system prompt changes and new benchmark numbers are needed.
+# python evaluation/ragas_eval.py
+```
+
+**Re-runnable diagnostics — run against the live system:**
+
 ```bash
 # Prerequisites: RDS running, PYTHONPATH=., venv active
 
-# One-time labeling — generates relevant_chunk_ids in golden_dataset.json
-python evaluation/label_chunks.py
-
-# Retrieval diagnostics — reads labeled dataset, runs 3 configs, outputs table
+# Retrieval diagnostics — reads labeled dataset, runs 3 configs, outputs table.
+# Re-run when retrieval config changes (RRF k, BM25 weights, top-k, rerank model).
+# No LLM calls — cheap to re-run.
 python evaluation/retrieval_diagnostics.py
 
-# RAGAs evaluation (already run — scores locked)
-# python evaluation/ragas_eval.py
-
-# Adversarial guardrail evaluation — 5 negative cases, two-signal pass detection
+# Adversarial guardrail evaluation — 5 negative cases, two-signal pass detection.
+# Re-run after any guardrail config change, system prompt change, or deployment.
 python evaluation/guardrail_test.py
 # Results printed to terminal + saved to data/guardrail_results.json
 ```
