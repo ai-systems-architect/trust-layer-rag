@@ -420,6 +420,30 @@ The hybrid retrieval pattern stays correct. RRF fusion has no scaling penalty. C
 
 The capability boundary stays correct. The system describes what frameworks require regardless of query volume. Compliance assertions remain a human judgment, not an AI decision, at any scale.
 
+### Acknowledged Production Gaps
+
+Three production concerns are acknowledged and deferred as next-layer concerns —
+the core architectural controls (guardrails, retrieval grounding, PII filtering,
+tracing) are not affected by these gaps.
+
+**Query audit logging.** Langfuse traces all pipeline spans per query, but user
+query content is not persisted to a separate audit log. For federal deployment,
+query-level audit logs (query text, user identity, response, guardrail action)
+would be required. Langfuse traces are the current substitute; a dedicated audit
+log table in RDS is the production path.
+
+**LLM judge independence.** RAGAs faithfulness and context precision scoring uses
+Claude via Bedrock as the evaluating judge — the same provider stack that generates
+answers. An independent judge (different provider or model family) would eliminate
+same-provider bias in evaluation. Acceptable for portfolio evaluation; a production
+benchmark would use a separate judge.
+
+**Corpus freshness monitoring.** Source documents (NIST 800-53, AI RMF, AI 600-1,
+FedRAMP) are versioned via corpus_hash in the ingestion pipeline — if the hash
+changes, re-ingestion is required. No automated trigger exists to detect when
+upstream documents publish new versions. Monitoring is manual. Automated freshness
+checks (polling NIST/FedRAMP publication feeds) are the production path.
+
 ---
 
 ## Repository Structure
