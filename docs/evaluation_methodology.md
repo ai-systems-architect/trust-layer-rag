@@ -44,6 +44,13 @@ by generating a synthetic question from the answer and comparing it to the origi
 Penalizes off-topic or over-hedged answers.
 Target: ≥ 0.70. Actual: 0.56 (semantic), 0.51 (hybrid) — below target, documented.
 
+**Context Precision and Faithfulness together measure retriever-generator alignment** — high
+precision confirms the right chunks went in; high Faithfulness confirms the generator used
+them. If precision holds but Faithfulness drops, that is the alignment failure — the generator
+ignored or contradicted the retrieved context. In this system both were strong: Context
+Precision 0.94 and Faithfulness 0.89, confirming the generator was using what the retriever
+surfaced.
+
 ### Why answer relevancy is below target (by design)
 
 Two systematic causes, neither fixable without reducing system integrity:
