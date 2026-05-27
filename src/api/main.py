@@ -68,18 +68,20 @@ class RetrieveRequest(BaseModel):
 
 
 class ChunkResponse(BaseModel):
-    text: str              = Field(..., description="Retrieved chunk content")
-    source_uri: str        = Field(..., description="Document source identifier")
+    text: str = Field(..., description="Retrieved chunk content")
+    source_uri: str = Field(..., description="Document source identifier")
     retrieval_timestamp: str = Field(..., description="ISO 8601 timestamp of this retrieval")
-    evidence_hash: str     = Field(..., description="SHA-256 of chunk text")
+    evidence_hash: str = Field(..., description="SHA-256 of chunk text")
     relevance_score: float = Field(..., description="Cohere cross-encoder relevance score")
-    framework: str         = Field(..., description="Framework display name")
-    control_id: str        = Field(..., description="First control ID found in chunk text, or empty string")
+    framework: str = Field(..., description="Framework display name")
+    control_id: str = Field(
+        ..., description="First control ID found in chunk text, or empty string"
+    )
 
 
 class RetrieveResponse(BaseModel):
     chunks: list[ChunkResponse]
-    query: str   = Field(..., description="Original query (pre-PII-scrub)")
+    query: str = Field(..., description="Original query (pre-PII-scrub)")
     retrieved_at: str = Field(..., description="ISO 8601 timestamp of the full request")
 
 
