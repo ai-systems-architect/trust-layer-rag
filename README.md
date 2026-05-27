@@ -113,6 +113,7 @@ correctness, auditability, and controlled behavior in high-risk environments.
 | Guardrails | Dual gates — input (PROMPT_ATTACK + MISCONDUCT) + output (contextual grounding ≥0.7, MISCONDUCT) | Bedrock Guardrails |
 | Evaluation | Golden dataset scoring | RAGAs |
 | Frontend | Chat UI + debug sidebar | Streamlit |
+| Retrieval API | REST endpoint for agent integration | FastAPI — `src/api/main.py`, start with `./run_api.sh` |
 | Infrastructure | RDS, S3, IAM | Terraform + AWS |
 
 Full rationale for each component: [docs/decision_log.md](docs/decision_log.md)
@@ -443,6 +444,14 @@ pip install -r requirements.txt
 cp .env.example .env
 # fill in .env with your credentials
 export PYTHONPATH=.
+```
+
+**To start the retrieval API** (for trust-layer-agent integration):
+
+```bash
+./run_api.sh
+# API available at http://localhost:8000
+# Docs at http://localhost:8000/docs
 ```
 
 **Requirements:**

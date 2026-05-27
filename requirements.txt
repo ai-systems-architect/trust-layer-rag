@@ -43,7 +43,7 @@ spacy>=3.0,<4.0
 # Config
 python-dotenv==1.0.1
 
-# REST API — P3 integration
+# REST API — trust-layer-agent integration
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 

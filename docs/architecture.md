@@ -49,6 +49,32 @@ Security posture mapped to NIST AI RMF and OWASP LLM Top 10 — see [README — 
 
 See [governed_rag_architecture.png](images/governed_rag_architecture.png) for full pipeline detail.
 
+### trust-layer-agent Integration
+
+The retrieval pipeline is exposed as a local REST API for consumption by
+trust-layer-agent. Retrieval only — no generation, no guardrails.
+
+```
+trust-layer-agent
+        │
+        │  POST /retrieve
+        │  {query, control_family, framework, top_k}
+        ▼
+src/api/main.py  (FastAPI — ./run_api.sh)
+        │
+        ├── PII scrub (Presidio)
+        ├── hybrid_search()  — dense + BM25 + RRF, metadata pre-filtered
+        └── rerank()         — Cohere cross-encoder, top_k chunks
+        │
+        ▼
+{chunks: [{text, evidence_hash, relevance_score, framework, control_id, ...}]}
+        │
+        ▼
+trust-layer-agent  (chunks with evidence hashes — no generated answer)
+```
+
+Start: `./run_api.sh` — API at `http://localhost:8000`, docs at `http://localhost:8000/docs`.
+
 ---
 
 ## System Architecture
@@ -456,8 +482,12 @@ trust-layer-rag/
 ├── LICENSE.md                      MIT
 ├── app.py                          Streamlit chat UI
 ├── pipeline.py                     End-to-end orchestrator
+├── run_api.sh                      Start retrieval API (trust-layer-agent integration)
 ├── config.py                       Centralized settings (env-driven)
 ├── requirements.txt
+├── src/
+│   └── api/
+│       └── main.py                 FastAPI — POST /retrieve, GET /health
 ├── ingestion/                      download → parse → chunk → embed → validate
 ├── retrieval/                      semantic, hybrid, query_enrichment, rerank
 ├── generation/                     Bedrock converse() + Pydantic validation

@@ -1,7 +1,7 @@
 """
 Trust Layer RAG — Retrieval API
 Exposes the governed compliance retrieval pipeline as a REST endpoint
-for P3 integration. Retrieval + rerank only — no generation.
+for trust-layer-agent integration. Retrieval + rerank only — no generation.
 
 Usage:
     PYTHONPATH=. uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -24,7 +24,7 @@ app = FastAPI(
     title="Trust Layer RAG — Retrieval API",
     description=(
         "Governed compliance RAG retrieval pipeline. "
-        "Returns reranked chunks with evidence hashes for P3 integration. "
+        "Returns reranked chunks with evidence hashes for trust-layer-agent integration. "
         "PII scrubbing active on all queries."
     ),
     version="1.0.0",
