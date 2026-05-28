@@ -75,6 +75,12 @@ trust-layer-agent  (chunks with evidence hashes — no generated answer)
 
 Start: `./run_api.sh` — API at `http://localhost:8000`, docs at `http://localhost:8000/docs`.
 
+**Known limitation — evidence_hash:** Hash is computed at retrieval time from chunk
+text as returned by the API. It detects in-transit tampering but does not verify the
+chunk matches the original ingested content — no ingest-time hash is stored in the
+`chunks` table. Full source integrity chain (ingest-time hash stored in DB → returned
+at retrieval → verified by consumer) is not yet implemented.
+
 ---
 
 ## System Architecture
