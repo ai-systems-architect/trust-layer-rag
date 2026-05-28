@@ -1,6 +1,6 @@
 # Future Enhancements — Trust Layer RAG
 
-Candidate improvements across four areas: evaluation, retrieval, governance, and
+Next-layer improvements across four areas: evaluation, retrieval, governance, and
 generation. Items here range from near-term production requirements to longer-term
 architectural improvements. Some are also referenced in the README Future Work
 section or `docs/architecture.md` — duplication is intentional; this document is
