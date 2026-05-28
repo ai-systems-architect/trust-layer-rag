@@ -182,6 +182,35 @@ required release checklist step whenever corpus is refreshed.
 
 ---
 
+### Natural Language Autoencoders (NLA) for Model Introspection
+
+**What:** Add NLA-based introspection to detect unverbalized reasoning or hidden
+model motivations during high-stakes compliance queries — surfacing what the model
+"considered" internally but did not output.
+
+**Why it matters:** Output guardrails verify what Claude returns. NLAs would verify
+how it got there — did it reason from retrieved chunks or from parametric memory?
+Did it internally consider factors it didn't cite? For compliance contexts where
+overclaiming is the primary failure mode, a deeper audit trail beyond output
+grounding is a meaningful governance control. NLAs can surface reasoning patterns
+that faithfulness scores miss — a response can be technically grounded in retrieved
+chunks while still reflecting model priors that weren't visible in the output.
+
+**What it requires:** This is research-stage capability. Anthropic's mechanistic
+interpretability work (sparse autoencoders, feature extraction) is the foundation,
+but there is no shipping API today. The production path depends on Anthropic
+exposing interpretability tooling via Bedrock or the Anthropic API — likely 12–24
+months out. When available: integration would wrap the `generate()` call in
+`generation/generate.py` with a pre/post introspection call on high-impact queries.
+Cost consideration: NLA introspection requires running encoder/decoder passes
+over activations — estimated 2–3× inference cost. Governance decision required:
+introspect on every query, high-impact queries only, or risk-triggered sampling?
+Budget allocation for "explainability overhead" becomes a first-class architecture
+decision. See DL-030 (reserved — cost-governance tradeoffs for advanced
+explainability).
+
+---
+
 ## Generation
 
 ### Streaming — converse_stream()
@@ -255,3 +284,43 @@ queries. The within-session memory foundation from DL-025 is the right starting 
 persistence is an extension of the same pattern.
 
 *Also noted in: README Future Work — System-specific compliance assistant.*
+
+---
+
+## Cross-Project Integration
+
+### trust-layer-rag → trust-layer-agent Governed Knowledge Service
+
+Several enhancements above are architected with trust-layer-agent integration
+in mind. The design principle: **trust-layer-rag enhancements that improve cost
+control, retrieval precision, and evaluation independence directly improve
+trust-layer-agent's viability as a governed agent architecture.** Governance is
+layered, not duplicated — trust-layer-rag governs what knowledge enters the
+system, trust-layer-agent governs what the agent does with it.
+
+**Retrieval-Augmented Persistent Memory** — trust-layer-agent's evidence
+collection workflow will call trust-layer-rag's retrieval API (`POST /retrieve`)
+across multiple agent runs. Persistent memory enables the agent to build context
+over time — system scope, control family, impact level — without re-establishing
+it on every tool invocation. Without this, each agent run starts cold regardless
+of prior work.
+
+**Independent LLM Judge** — when trust-layer-agent uses trust-layer-rag as a
+governed knowledge service, evaluation independence matters more, not less. If
+trust-layer-rag's evaluation judge is the same model family trust-layer-agent uses
+for reasoning, cross-system validation becomes circular — one Claude instance
+validating another Claude instance's outputs. An independent judge (different
+provider) breaks that circularity.
+
+**Intent Routing (Haiku vs. Sonnet)** — trust-layer-agent's
+`lookup_compliance_requirement` tool will fire multiple times per agent run,
+potentially 5–10 retrieval calls in a single evidence collection workflow. Intent
+routing reduces per-tool-call cost significantly — especially important when the
+agent makes repeated lookups across the same control family in a single run.
+
+**HyDE and Adaptive Chunking** — agent-generated tool call queries have different
+vocabulary patterns than human-authored queries. Queries synthesized by the agent
+mid-workflow ("retrieve evidence for AC-6 implementation at Moderate impact in
+cloud-hosted systems") are more structured but less natural than user queries. HyDE
+and adaptive chunking improve retrieval quality when the query source is
+agent-generated rather than human-authored.
