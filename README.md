@@ -32,7 +32,7 @@ Designed for high-stakes, audit-sensitive environments where correctness, tracea
 
 - **[AI Impact Assessment (PDF)](docs/AIIA_FCIS_v1_0.pdf)** — federal-grade governance artifact mapping RAG-specific risks (hallucination, overclaiming, retrieval integrity, PII leakage to traces) to implemented controls and evidence. Sample artifact — fictional sponsoring agency.
 - **[Beyond Retrieval: Architecting the Trust Layer for Enterprise AI](ARTICLE.md)** — generalized architectural patterns this project demonstrates, drawn from production RAG governance lessons.
-- **[Architecture](docs/architecture.md)** · **[Decision log](docs/decision_log.md)** · **[Evaluation methodology](docs/evaluation_methodology.md)**
+- **[Architecture](docs/architecture.md)** · **[Decision log](docs/decision_log.md)** · **[Evaluation methodology](docs/evaluation_methodology.md)** · **[Future enhancements](docs/future_enhancements.md)**
 
 🔗 **Related portfolio projects**
 
