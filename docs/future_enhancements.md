@@ -114,6 +114,28 @@ benefit may not justify re-ingestion cost at current corpus size.
 
 ---
 
+### Connection Pooling for Concurrent Load
+
+**What:** Add a `ThreadedConnectionPool` (max ~5 connections) to the psycopg2
+connection management in `retrieval/semantic.py`.
+
+**Why it matters:** FastAPI runs synchronous route handlers in a thread pool.
+Under concurrent load, multiple threads can open simultaneous psycopg2 connections
+with no upper bound — one new connection per in-flight request. For the current
+single-consumer model (trust-layer-agent calling `/retrieve` serially) this is
+fine. It becomes a real risk in trust-layer-orchestration, where parallel
+sub-agents will call `/retrieve` concurrently within a single orchestration run,
+potentially exhausting database connection limits.
+
+**What it requires:** Replace the `get_connection()` pattern in
+`retrieval/semantic.py` with a `ThreadedConnectionPool` initialized at module
+load time (min=1, max=5). Callers acquire a connection with `getconn()` and
+release it with `putconn()` in a `finally` block. Connection limit of 5 is
+sufficient for sub-agent parallelism; tune upward based on RDS instance connection
+limits if needed.
+
+---
+
 ### Raise top-k from 5 to 8
 
 **What:** Increase the number of reranked chunks passed to generation from 5 to 8.
