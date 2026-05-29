@@ -21,7 +21,7 @@ Implements a governed compliance RAG pattern: hybrid retrieval + dual guardrail 
 - **Three independent evaluation layers** — RAGAs end-to-end (Faithfulness 0.89–0.90, Context Precision 0.94–0.95 across configurations), retrieval diagnostics (Recall@k, MRR, nDCG across three configurations), and adversarial guardrail evaluation. Each layer answers a different question.
 - **Dual-gate Bedrock Guardrails** — input gate (`PROMPT_ATTACK` HIGH) blocks injection and jailbreak attempts before retrieval fires, saving full pipeline cost on adversarial input. Output gate enforces contextual grounding (`GROUNDING ≥ 0.7`, `RELEVANCE ≥ 0.7`) post-generation in the same `converse()` call. Off-topic queries are handled downstream by retrieval grounding, not the input gate.
 - **Domain-calibrated PII filtering** — Presidio with a 20-term federal allowlist and control-ID regex post-filter prevents false-positive scrubbing of NIST identifiers (AC-2, IR-4) and program names (FedRAMP, NIST, AWS) that general-purpose NER classifies as PERSON entities.
-- **Decision log discipline** — every architectural choice documented in DL-001 through DL-029 with alternatives evaluated and rationale recorded. The architecture is auditable, not just observable.
+- **Decision log discipline** — every architectural choice documented in DL-001 through DL-030 with alternatives evaluated and rationale recorded. The architecture is auditable, not just observable.
 - **Federal-grade governance artifact** — sample AI Impact Assessment maps RAG-specific risks to implemented controls following NIST AI RMF 1.0, EO 13960, and OMB M-21-06 patterns.
 
 Designed for high-stakes, audit-sensitive environments where correctness, traceability, and controlled behavior matter more than fluency.
@@ -150,7 +150,7 @@ apply_guardrail call (~50ms). A blocked output query costs the full pipeline.
 | 9 | Generation + Output Guardrail | Claude Sonnet 4.5 via Bedrock `converse()` with `guardrailConfig` attached — single API call generates response and applies guardrail. Contextual grounding threshold ≥ 0.7 — responses below threshold are blocked before reaching the user (pass/fail; raw grounding score is not returned by the API). Pydantic `GenerateResponse` validates response shape before return. | 004, 022 |
 | 10 | Evaluation (offline) | Three independent layers — RAGAs (Faithfulness/Context Precision/Context Recall/Answer Relevancy), retrieval diagnostics (Recall@k/MRR/nDCG across three configurations), and adversarial guardrail evaluation (5 negative cases with two-signal pass detection). | 009, 021, 028 |
 
-Full per-stage rationale, code references, and design tradeoffs are in [docs/architecture.md](docs/architecture.md). Decision log entries (DL-001 through DL-029) cover the why behind each stage in [docs/decision_log.md](docs/decision_log.md).
+Full per-stage rationale, code references, and design tradeoffs are in [docs/architecture.md](docs/architecture.md). Decision log entries (DL-001 through DL-030) cover the why behind each stage in [docs/decision_log.md](docs/decision_log.md).
 
 ---
 
@@ -299,7 +299,7 @@ The examples correspond to the three query type categories in the 20-question go
 | Generation | Claude Sonnet 4.5 via Bedrock | Direct Anthropic API | Bedrock keeps generation within AWS boundary — direct API sends chunks to external endpoint |
 | Guardrails | Dual gates input + output | Output-only | Input gate stops prompt injection before retrieval fires — one Bedrock call vs full pipeline cost |
 
-Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-029).
+Full rationale with alternatives evaluated in docs/decision_log.md (DL-001 through DL-030).
 
 ---
 
@@ -322,7 +322,7 @@ Failures 1 and 3 are accepted tradeoffs. Failure 2 is resolved. Failure 4 is an 
 
 | Function | Implementation |
 |---|---|
-| GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-029) |
+| GOVERN | System prompt enforces compliance reference boundary — no compliance determinations, output grounded in retrieved context, Bedrock Guardrails enforcement, decision log documents all architectural choices (DL-001 through DL-030) |
 | MAP | Corpus scope explicitly bounded to four frameworks, system capability ceiling documented in README, PII surfaces identified across input / corpus / output / traces |
 | MEASURE | RAGAs evaluation against 20-question golden dataset, semantic vs hybrid quantified comparison, Langfuse latency and span tracing per pipeline stage |
 | MANAGE | Guardrails block compliance determination responses, provider abstraction enables model swap without pipeline rewrite |
@@ -361,7 +361,7 @@ self-hosted Langfuse is documented in [docs/architecture.md](docs/architecture.m
 
 ## Future Work
 
-Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-029).
+Implemented items removed — see docs/decision_log.md for closed decisions (DL-001 through DL-030).
 
 ### Production Required
 

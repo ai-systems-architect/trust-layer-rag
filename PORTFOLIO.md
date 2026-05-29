@@ -324,4 +324,4 @@ Implemented items removed — see docs/decision_log.md for closed decisions (DL-
 
 *Generation and vector store within AWS boundary. RAGAs evaluated. Dual Bedrock Guardrails
 enforced. PII filtered at input and output. GCP and Azure equivalents documented.
-Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-029.*
+Architectural controls mapped to NIST AI RMF 1.0 functions — see "NIST AI RMF Alignment" section above. Decision rationale: DL-001 through DL-030.*
