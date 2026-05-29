@@ -235,6 +235,51 @@ explainability).
 
 ## Generation
 
+### Prompt Caching on System Prompt
+
+**What:** Add a `cachePoint` to the system prompt block in `generation/generate.py`
+so Bedrock caches the system prompt across repeated calls.
+
+**Why it matters:** The system prompt is identical on every `generate()` call.
+Bedrock prompt caching reduces cached input token cost by ~70% on cache hits — the
+prompt is stored at the Bedrock inference layer and not re-processed on subsequent
+calls within the cache TTL (~5 minutes).
+
+**Why it is deferred:** Bedrock prompt caching requires a minimum of **1,024 tokens**
+in the cached prefix to activate (Claude Sonnet models). The current system prompt is
+**94 tokens** — well below the threshold. Adding `cachePoint` at this size is
+syntactically valid but produces no cache hits and no savings.
+
+**When this becomes viable:** Two paths:
+1. *Expand the system prompt* past 1,024 tokens with substantive static content —
+   detailed citation requirements, control-family-specific guidance, output format
+   spec, anti-hallucination rules. This also improves generation quality.
+2. *Prefix-cache strategy* — prepend a large static document (e.g., the full AI RMF
+   text as grounding context) to the system block, putting the `cachePoint` after it.
+   Cost-effective only if the document is used on every query.
+
+**What the code change requires (when threshold is met):** In `generation/generate.py`,
+change the `system` block in `request_kwargs` from:
+
+```python
+"system": [{"text": SYSTEM_PROMPT}]
+```
+
+to:
+
+```python
+"system": [
+    {"text": SYSTEM_PROMPT},
+    {"cachePoint": {"type": "default"}},
+]
+```
+
+One addition. No other changes needed — Bedrock handles cache storage and
+invalidation automatically. Add `ENABLE_PROMPT_CACHING = True` flag to `config.py`
+for environment-level control.
+
+---
+
 ### Streaming — converse_stream()
 
 **What:** Replace `converse()` with `converse_stream()` in `generation/generate.py`
