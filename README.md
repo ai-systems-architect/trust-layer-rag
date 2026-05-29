@@ -496,7 +496,7 @@ export PYTHONPATH=.
 | Bedrock Claude Sonnet 4.5 | ~$0.005–0.025 (varies by output length) |
 | Bedrock Guardrails — input gate (`apply_guardrail`) | ~$0.0008 |
 | Bedrock Guardrails — output gate | included in `converse()` — no separate charge |
-| Query enrichment (Claude Sonnet 4.5, when triggered) | ~$0.0006 avg (est. 40% trigger rate × ~$0.0015/call) |
+| Query enrichment (Claude Sonnet 4.5, when triggered) | ~$0.0015/call × trigger rate (unverified — see DL-030) |
 | **Approximate total** | **~$0.008–0.028** |
 
 **Blocked queries** cost the input guardrail call only (~$0.0008) — no embedding, retrieval, rerank, or generation cost when the input gate intervenes.

@@ -1437,8 +1437,8 @@ grouping guardrails and enrichment into an aggregate. Specifically:
 3. Query enrichment (pronoun resolution in `retrieval/query_enrichment.py`) is a
    separate Claude Sonnet 4.5 `converse()` call — billed as a second LLM
    invocation, not as part of generation. Cost: ~$0.0015 per triggered call.
-   Estimated trigger rate: ~40% of queries (multi-turn sessions with referential
-   queries). Average per-query enrichment cost: ~$0.0006.
+   Trigger rate: **unverified estimate — not derived from Langfuse trace data.**
+   See enrichment trigger rate note in rationale below.
 
 **Rationale:**
 
@@ -1453,10 +1453,27 @@ happens inside the generation call at no incremental billing unit. Only
 **Enrichment as a separate cost center:** Query enrichment fires an independent
 Bedrock `converse()` call at `temperature=0.0` with a short rewrite prompt
 (~200–300 input tokens, ~50 output tokens). At Claude Sonnet 4.5 pricing this is
-~$0.0015 per call. The pipeline bypasses enrichment when there is no conversation
-history (single-turn queries), so the cost is conditional, not per-query fixed.
-At a 40% trigger rate, the average per-query contribution is ~$0.0006 — small
-but non-trivial at scale (adds ~$60/month at 100K queries/month).
+~$0.0015 per triggered call. The pipeline bypasses enrichment via three fast
+O(1) conditions in `_needs_enrichment()`: (1) no conversation history, (2) query
+is 8+ words (treated as self-contained), (3) no ambiguous pronoun from the set
+{"that", "it", "this", "these", "those", "they", "them"}. Enrichment fires only
+when all three conditions pass — history exists AND query is under 8 words AND
+contains an ambiguous pronoun.
+
+**Enrichment trigger rate — estimate, not empirically measured.** The "~40%"
+figure used in the cost table and prior discussion is an assumption, not derived
+from Langfuse trace data. Given the three-condition filter, 40% is likely an
+overestimate — conditions 2 and 3 together are restrictive. A typical compliance
+query ("What does AC-6 require for account management?") is 8+ words and fails
+condition 2 immediately. The realistic trigger population is short pronoun-bearing
+follow-ups in active multi-turn sessions ("How does that relate?", "Can you
+expand on it?") — probably 10–20% of all queries in a conversational session,
+less for single-turn usage.
+
+To measure the actual rate: Langfuse traces log `enriched_query` in the pipeline
+span metadata (set at `pipeline.py` line 187). Query the Langfuse trace export
+for traces where `enriched_query != query` to get the empirical trigger rate.
+Until measured, treat the cost table figure as an upper-bound estimate.
 
 **Blocked query economics:** When the input guardrail fires, the pipeline exits
 after one `apply_guardrail` call. No embedding, retrieval, rerank, or generation
