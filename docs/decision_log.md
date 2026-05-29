@@ -1421,3 +1421,66 @@ helpers in `evaluation/worked_examples_debug.py`.
   (only when worked examples need refresh).
 
 **Related:** DL-008 (pipeline orchestration), DL-009 (evaluation framework), DL-017 (PII scrubbing — the post-fix behaviour visible in Example 3 was captured via this tooling)
+
+---
+
+## DL-030 — Per-Query Cost Model: Guardrail and Enrichment Accounting
+**Date:** 2026-05-29
+**Status:** Accepted
+
+**Decision:** Break out per-query cost into six distinct line items rather than
+grouping guardrails and enrichment into an aggregate. Specifically:
+1. Input guardrail (`apply_guardrail`) is a separate Bedrock call — billed
+   separately at ~$0.0008 per call.
+2. Output guardrail is NOT a separate charge — it runs inside `converse()` via
+   `guardrailConfig` and is billed as part of the generation call.
+3. Query enrichment (pronoun resolution in `retrieval/query_enrichment.py`) is a
+   separate Claude Sonnet 4.5 `converse()` call — billed as a second LLM
+   invocation, not as part of generation. Cost: ~$0.0015 per triggered call.
+   Estimated trigger rate: ~40% of queries (multi-turn sessions with referential
+   queries). Average per-query enrichment cost: ~$0.0006.
+
+**Rationale:**
+
+**Guardrail billing split:** The prior cost table listed "Bedrock Guardrails
+(input + output) ~$0.0015" — this overstated cost by double-counting the output
+guardrail as a separate charge. Bedrock `guardrailConfig` attached to `converse()`
+does not generate an additional API call; grounding and relevance evaluation
+happens inside the generation call at no incremental billing unit. Only
+`apply_guardrail()` generates its own billable event (the input gate in
+`generate.py check_guardrail()`).
+
+**Enrichment as a separate cost center:** Query enrichment fires an independent
+Bedrock `converse()` call at `temperature=0.0` with a short rewrite prompt
+(~200–300 input tokens, ~50 output tokens). At Claude Sonnet 4.5 pricing this is
+~$0.0015 per call. The pipeline bypasses enrichment when there is no conversation
+history (single-turn queries), so the cost is conditional, not per-query fixed.
+At a 40% trigger rate, the average per-query contribution is ~$0.0006 — small
+but non-trivial at scale (adds ~$60/month at 100K queries/month).
+
+**Blocked query economics:** When the input guardrail fires, the pipeline exits
+after one `apply_guardrail` call. No embedding, retrieval, rerank, or generation
+cost is incurred. A blocked query costs ~$0.0008 total vs ~$0.008–0.028 for a
+full pipeline run — a ~10–35× cost reduction per adversarial or off-topic input.
+This is the correct operating behavior: the input gate is a cost control as much
+as a security control.
+
+**Prompt caching:** The system prompt (`prompts/system_prompt.txt`) is 94 tokens
+at current length. Bedrock prompt caching requires a minimum of 1,024 tokens in
+the cached prefix to activate for Claude Sonnet models. Adding `cachePoint` at
+current prompt length produces no cache hits. Deferred to
+`docs/future_enhancements.md` — viable when the system prompt expands past the
+threshold or a prefix-cache strategy (static document prepended to system block)
+is adopted.
+
+**Consequences:**
+- Cost table in README now shows six line items with accurate per-component
+  attribution.
+- Blocked query cost is documented as a first-class architectural property, not
+  a footnote.
+- Enrichment cost is flagged as conditional and volume-sensitive — relevant input
+  to the intent routing decision (DL future: route control-ID queries to Haiku,
+  reducing both enrichment and generation cost for the simpler query class).
+
+**Related:** DL-022 (dual guardrail architecture), DL-025 (query enrichment
+design), DL-008 (cost and latency targets)

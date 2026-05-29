@@ -494,8 +494,12 @@ export PYTHONPATH=.
 | OpenAI embedding | ~$0.00013 |
 | Cohere rerank | ~$0.001 |
 | Bedrock Claude Sonnet 4.5 | ~$0.005–0.025 (varies by output length) |
-| Bedrock Guardrails (input + output) | ~$0.0015 |
+| Bedrock Guardrails — input gate (`apply_guardrail`) | ~$0.0008 |
+| Bedrock Guardrails — output gate | included in `converse()` — no separate charge |
+| Query enrichment (Claude Sonnet 4.5, when triggered) | ~$0.0006 avg (est. 40% trigger rate × ~$0.0015/call) |
 | **Approximate total** | **~$0.008–0.028** |
+
+**Blocked queries** cost the input guardrail call only (~$0.0008) — no embedding, retrieval, rerank, or generation cost when the input gate intervenes.
 
 Langfuse traces confirm these ranges. Generation dominates at ~90% of total query time — a multi-paragraph cited compliance response through `converse()` with `guardrailConfig` attached is doing more work than a typical chat response: five reranked chunks passed as context, citation-enforced system prompt, and guardrail evaluation in the same call.
 
