@@ -11,6 +11,12 @@ from config import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# Module-level singleton — one HTTP connection pool shared across all calls.
+# Creating a new cohere.Client() per call opens a fresh connection pool each
+# time; under rapid sequential load this accumulates TIME_WAIT sockets in the
+# same way as the OpenAI client. Single client reuses the TLS session.
+_cohere_client = cohere.Client(api_key=COHERE_API_KEY)
+
 
 def rerank(query: str, chunks: list[dict], top_k: int = TOP_K_RERANK) -> list[dict]:
     """Cross-encoder reranking via Cohere rerank-english-v3.0.
@@ -20,11 +26,9 @@ def rerank(query: str, chunks: list[dict], top_k: int = TOP_K_RERANK) -> list[di
     see docs/decision_log.md DL-005"""
     if not chunks:
         return []
-
-    client = cohere.Client(api_key=COHERE_API_KEY)
     documents = [c["text"] for c in chunks]
 
-    response = client.rerank(
+    response = _cohere_client.rerank(
         model=RERANK_MODEL,
         query=query,
         documents=documents,

@@ -19,6 +19,12 @@ from config import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# Module-level singleton — one HTTP connection pool shared across all calls.
+# Creating a new OpenAI() client per call opens a fresh httpx connection pool
+# each time; under rapid sequential load, prior pools sit in TCP TIME_WAIT and
+# exhaust local port slots or hit per-IP connection limits by the 3rd–4th call.
+_openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
 
 def get_connection():
     """SSL-enforced connection — matches rds.force_ssl=1."""
@@ -35,8 +41,7 @@ def get_connection():
 def embed_query(query: str) -> list[float]:
     """Embed query with same model used at ingest time — cosine space alignment.
     see docs/decision_log.md DL-003"""
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.embeddings.create(
+    response = _openai_client.embeddings.create(
         model=EMBEDDING_MODEL,
         input=query,
         dimensions=EMBEDDING_DIMENSIONS,
